@@ -83,23 +83,39 @@
     <div class="panel compare-bar">
       <label class="field inline-field">Lab <select id="cmp-lab"></select></label>
       <label class="field inline-field">Instance <select id="cmp-instance"></select></label>
-      <div class="spacer"></div>
+      <p class="batch-progress" id="batch-progress"></p>
       <button class="primary" id="batch-missing">Run missing benchmarks</button>
       <button id="batch-all">Re-run all</button>
       <button id="batch-stop" disabled>Stop</button>
-      <button id="copy-md">Copy tables as Markdown</button>
     </div>
-    <p class="batch-progress" id="batch-progress"></p>
     <div class="panel">
-      <div class="card-head">Objective: average (min – max) and time per run</div>
+      <div class="card-head">Average score (min – max) and time per run</div>
       <div class="table-wrap"><table id="cmp-table"></table></div>
     </div>
     <div class="panel">
       <div class="card-head">Average time per run (algorithm only)</div>
       <div id="time-bars"></div>
     </div>
-    <div class="card-head outside">Best solution per method <span class="hint">click to open in the Run tab</span></div>
-    <div class="best-grid" id="best-grid"></div>
+    <div class="panel">
+      <div class="card-head">Best solution per method <span class="hint">click to open in the Run tab</span></div>
+      <div class="best-grid" id="best-grid"></div>
+    </div>
+    <div class="panel" id="report-section">
+      <div class="card-head">Report</div>
+      <div class="report-row">
+        <button class="primary" id="report-gen">Generate report</button>
+        <span id="report-links" class="report-links"></span>
+        <span id="report-msg" class="report-msg"></span>
+      </div>
+      <p class="hint" id="report-file"></p>
+      <div id="report-editor" hidden>
+        <textarea id="report-text" spellcheck="false"></textarea>
+        <div class="report-row">
+          <button class="primary" id="report-save">Save</button>
+          <button id="report-close">Cancel</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <script src="/app.js"></script>

@@ -569,6 +569,7 @@ function drawRunsChart() {
 // ------------------------------------------------------------------ compare tab
 
 async function loadCompare() {
+  loadReport();
   const results = await getJSON(`/api/results?lab=${S.lab.id}&instance=${encodeURIComponent(S.instance)}`);
   const by = {};
   for (const r of results) (by[r.method] = by[r.method] || {})[r.lang] = r;
@@ -577,9 +578,17 @@ async function loadCompare() {
 
   // objective + time table
   let html = `<tr><th>Method</th>${langs.map((l) => `<th><span class="lang-dot" style="background:${langColor(l)}"></span>${esc(langName(l))}</th>`).join("")}<th>Same results?</th></tr>`;
+  const scoreOf = (id) => {
+    const v = Object.values(by[id] || {}).map((r) => r.stats.obj_avg);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const maxScore = Math.max(0, ...S.lab.methods.map((m) => scoreOf(m.id) || 0)); // one scale for the whole lab
   for (const m of S.lab.methods) {
     const row = by[m.id] || {};
-    html += `<tr><td><b>${esc(m.name)}</b></td>`;
+    const sc = scoreOf(m.id);
+    const scoreBar = sc == null ? "" : `<div class="bar-row score-row">
+        <div class="bar" style="width:${(100 * sc / maxScore).toFixed(2)}%;background:var(--accent, #3b5bdb)"></div></div>`;
+    html += `<tr><td><b>${esc(m.name)}</b>${scoreBar}</td>`;
     for (const l of langs) {
       const r = row[l];
       if (!r) { html += `<td class="empty">not run yet</td>`; continue; }
@@ -594,19 +603,18 @@ async function loadCompare() {
 
   // time bars
   let bars = "";
+  const allNs = results.filter((r) => langs.includes(r.lang)).map((r) => r.stats.ns_avg);
+  const maxNs = Math.max(...allNs); // one scale for the whole lab
   for (const m of S.lab.methods) {
     const row = by[m.id] || {};
     const have = langs.filter((l) => row[l]);
     if (!have.length) continue;
-    const maxNs = Math.max(...have.map((l) => row[l].stats.ns_avg));
-    const py = row.python ? row.python.stats.ns_avg : null;
     bars += `<div class="mname">${esc(m.name)}</div>`;
     for (const l of have) {
       const ns = row[l].stats.ns_avg;
-      const speed = py && l !== "python" ? ` · ${(py / ns).toFixed(1)}× faster than Python` : "";
       bars += `<div class="lname">${esc(langName(l))}</div><div class="bar-row">
         <div class="bar" style="width:${(100 * ns / maxNs).toFixed(2)}%;background:${langColor(l)}"></div>
-        <span class="bar-label">${fmtTime(ns)}${speed}</span></div>`;
+        <span class="bar-label">${fmtTime(ns)}</span></div>`;
     }
   }
   $("time-bars").innerHTML = bars ? `<div class="bars">${bars}</div>` : `<p class="hint">No benchmarks yet. Click “Run missing benchmarks”.</p>`;
@@ -618,10 +626,11 @@ async function loadCompare() {
     const all = Object.values(by[m.id] || {});
     if (!all.length) continue;
     const best = all.reduce((a, b) => (b.best.obj < a.best.obj ? b : a));
+    const fastest = all.reduce((a, b) => (b.stats.ns_avg < a.stats.ns_avg ? b : a));
     const card = document.createElement("div");
     card.className = "panel best-card";
     card.innerHTML = `<div class="card-head">${esc(m.name)}</div><canvas></canvas>
-      <div class="meta"><b>${fmtInt(best.best.obj)}</b> <span class="hint">= ${fmtInt(best.best.len)} + ${fmtInt(best.best.cost)} · run #${best.best.run} · ${esc(langName(best.lang))}</span></div>`;
+      <div class="meta"><b>${fmtInt(best.best.obj)}</b> <span class="hint">= ${fmtInt(best.best.len)} + ${fmtInt(best.best.cost)} · run #${best.best.run} · ${esc(langName(fastest.lang))}</span></div>`;
     card.addEventListener("click", () => openBest(m, best));
     grid.appendChild(card);
     requestAnimationFrame(() => drawPlot(card.querySelector("canvas"), best.best.tour, { small: true }));
@@ -638,17 +647,15 @@ function matchCell(row) {
 }
 
 function openBest(method, result) {
+  if (busy()) return;
   switchTab("run");
   selectMethod(method.id);
-  clearFrames();
-  S.frames = [{ tour: result.best.tour, run: result.best.run, obj: result.best.obj }];
-  S.cursor = 0;
-  S.session = null;
-  $("tour-card").hidden = false;
-  $("tour-title").textContent = `Best saved solution · ${method.name} · ${langName(result.lang)} · run #${result.best.run}`;
-  $("tour-list").textContent = result.best.tour.join(", ");
-  S.frames[0].label = `${method.name} · best saved (${langName(result.lang)})`;
-  S.dirty = true;
+  // Runs are deterministic (start = run index, fixed seed), so replay the best run in trace mode.
+  S.lang = result.lang;
+  renderLangButtons();
+  setMode("trace");
+  $("start").value = result.best.run;
+  run();
 }
 
 async function runBatch(onlyMissing) {
@@ -693,25 +700,32 @@ async function runBatch(onlyMissing) {
   }
 }
 
-function copyMarkdown() {
-  const by = S.compare || {};
-  const langs = LANG_ORDER.filter((l) => S.lab.langs.includes(l));
-  const head = `| Method | ${langs.map(langName).join(" | ")} |\n|---|${langs.map(() => "---|").join("")}\n`;
-  let obj = `**${S.instance}: objective, avg (min – max)**\n\n` + head;
-  let time = `**${S.instance}: average time per run**\n\n` + head;
-  for (const m of S.lab.methods) {
-    const row = by[m.id] || {};
-    obj += `| ${m.name} | ${langs.map((l) => row[l] ? `${Math.round(row[l].stats.obj_avg)} (${row[l].stats.obj_min} – ${row[l].stats.obj_max})` : "–").join(" | ")} |\n`;
-    time += `| ${m.name} | ${langs.map((l) => row[l] ? fmtTime(row[l].stats.ns_avg) : "–").join(" | ")} |\n`;
+async function loadReport() {
+  const id = S.lab.id;
+  const r = await getJSON("/api/report?lab=" + id);
+  if (S.lab.id !== id) return;
+  $("report-gen").textContent = r.md ? "Regenerate report" : "Generate report";
+  $("report-gen").title = r.md ? "Rebuild the PDF from the Markdown, refreshing results and visualisations" : "Create Report.md and Report.pdf for this lab";
+  $("report-links").innerHTML = (r.pdf ? `<a class="chip-link" href="/report/${id}/Report.pdf" target="_blank">Open PDF</a>` : "")
+    + (r.md ? `<button class="chip-link" id="report-edit">Edit</button>` : "");
+  if (r.md) $("report-edit").addEventListener("click", editReport);
+  $("report-file").textContent = r.md ? `File: labs/${id}/report/Report.md` : "";
+}
+
+async function makeReport() {
+  const btn = $("report-gen"), msg = $("report-msg");
+  btn.disabled = true;
+  msg.textContent = "Generating…";
+  try {
+    const res = await fetch("/api/report?lab=" + S.lab.id, { method: "POST" });
+    const r = await res.json();
+    if (r.error) throw new Error(r.error);
+    msg.textContent = (r.created ? "Report created. " : "Report regenerated. ") + (r.warnings.length ? "Warnings: " + r.warnings.join("; ") : "");
+  } catch (e) {
+    msg.textContent = "Failed: " + e.message;
   }
-  let bestList = `**${S.instance}: best solutions (node indices from 0)**\n\n`;
-  for (const m of S.lab.methods) {
-    const all = Object.values(by[m.id] || {});
-    if (!all.length) continue;
-    const best = all.reduce((a, b) => (b.best.obj < a.best.obj ? b : a));
-    bestList += `- ${m.name} (${best.best.obj}): ${best.best.tour.join(", ")}\n`;
-  }
-  copyText(obj + "\n" + time + "\n" + bestList, $("copy-md"));
+  btn.disabled = false;
+  loadReport();
 }
 
 function copyText(text, button) {
@@ -768,7 +782,9 @@ function bindEvents() {
   $("batch-stop").addEventListener("click", stop);
   $("batch-missing").addEventListener("click", () => runBatch(true));
   $("batch-all").addEventListener("click", () => runBatch(false));
-  $("copy-md").addEventListener("click", copyMarkdown);
+  $("report-gen").addEventListener("click", makeReport);
+  $("report-save").addEventListener("click", saveReport);
+  $("report-close").addEventListener("click", () => { $("report-editor").hidden = true; });
   $("copy-tour").addEventListener("click", () => copyText($("tour-list").textContent, $("copy-tour")));
 
   $("pb-first").addEventListener("click", () => seek(0));
@@ -828,3 +844,25 @@ function bindEvents() {
 }
 
 init();
+
+async function editReport() {
+  const r = await getJSON("/api/report/md?lab=" + S.lab.id);
+  $("report-text").value = r.text;
+  $("report-editor").hidden = false;
+  $("report-text").focus();
+}
+
+async function saveReport() {
+  const text = $("report-text").value;
+  $("report-editor").hidden = true;
+  $("report-msg").textContent = "Saving…";
+  try {
+    const res = await fetch("/api/report/md?lab=" + S.lab.id, { method: "POST", body: text });
+    const r = await res.json();
+    if (r.error) throw new Error(r.error);
+  } catch (e) {
+    $("report-msg").textContent = "Failed: " + e.message;
+    return;
+  }
+  makeReport();
+}
