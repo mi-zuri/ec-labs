@@ -1,5 +1,7 @@
 # {{title}}
 
+Author: Michał Żurawski 160252
+
 ## Description of the problem
 
 Each instance contains nodes with coordinates (x, y) and a cost. Select exactly half of the nodes (rounded up) and connect them into a closed cycle. Minimise **cycle length + sum of the costs of the selected nodes**. Distances are Euclidean, rounded to the nearest integer.
