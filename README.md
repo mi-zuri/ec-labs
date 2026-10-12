@@ -20,7 +20,7 @@ Open <http://127.0.0.1:8000>.
     The time per run is the algorithm only. Results are saved in `out/results/`.
 - **Compare tab**: min/avg/max per method × language, time per run, speed-up vs Python,
   whether all languages give identical results, best tour per method.
-  "Run missing benchmarks" fills the table. "Copy tables as Markdown" gives you report-ready tables.
+  "Run missing benchmarks" fills the table. "Generate report" builds the lab report (see Reports).
 
 Compiled languages are rebuilt automatically when their source changes (`out/build/`).
 Every solution returned is checked by an independent checker in the server.
@@ -49,23 +49,29 @@ out/                      generated, safe to delete
 2. Write `labs/lab2/lab.json`:
 
    ```json
-   { "title": "Local search",
-     "methods": [ { "id": "ls_greedy", "name": "Greedy local search", "shape": "cycle" } ] }
+   {
+     "title": "Local search",
+     "methods": [
+       { "id": "ls_greedy", "name": "Greedy local search", "shape": "cycle" }
+     ]
+   }
    ```
 
 3. Copy `labs/lab1/<lang>/solver.*` to `labs/lab2/<lang>/`, replace the algorithms,
    keep `solve` and `runs_for`. Languages without a solver file are disabled for that lab.
 4. Reload the page. Details in `common/PROTOCOL.md`.
 
+## Reports
+
+Compare tab → **Generate report** creates `labs/labN/report/Report.md` and `Report.pdf` (plots in `report_files/`) (all instances, from the saved
+benchmarks); the button then becomes **Regenerate report**. Edit `Report.md` by hand, then regenerate:
+text outside the `<!-- auto:... -->` blocks is kept, while results, visualisations, best-solution lists and the
+GitHub source link (taken from the git remote) are rebuilt every time (a deleted block is re-added).
+First-time text comes from `tool/report_template.md`; write the algorithms and conclusions by hand in `Report.md`.
+PDF export needs Chrome/Chromium (set `CHROME` if it is not found). CLI: `python3 tool/report.py lab1`.
+
 Run a solver by hand (from the project root):
 
 ```sh
 python3 labs/lab1/python/solver.py --instance data/TSPA.csv --method nn_any --mode trace --start 0
 ```
-
-## Install Rust (Homebrew)
-
-1. `brew update`
-2. `brew install rust`
-3. Check it: `rustc --version` and `cargo --version`
-4. Restart `python3 tool/server.py` and reload the page. The Rust button becomes active.
