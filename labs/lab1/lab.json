@@ -1,0 +1,9 @@
+{
+  "title": "Greedy heuristics",
+  "methods": [
+    { "id": "random", "name": "Random solution", "shape": "path" },
+    { "id": "nn_end", "name": "Nearest neighbor (end only)", "shape": "path" },
+    { "id": "nn_any", "name": "Nearest neighbor (any position)", "shape": "path" },
+    { "id": "greedy_cycle", "name": "Greedy cycle", "shape": "cycle" }
+  ]
+}
