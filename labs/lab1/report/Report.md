@@ -36,7 +36,9 @@ Greedy cycle (start):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method. All best solutions were checked with the solution checker: **yes**. Results are identical in all implemented languages: **yes**.
+Objective = cycle length + sum of node costs, over 200 runs per method.
+All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
+Results are identical in all implemented languages: **yes**.
 
 ### Instance TSPA
 
