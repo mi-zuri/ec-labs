@@ -1,5 +1,7 @@
 # Lab 1 - Greedy heuristics
 
+Author: Michał Żurawski 160252
+
 ## Description of the problem
 
 Each instance contains nodes with coordinates (x, y) and a cost. Select exactly half of the nodes (rounded up) and connect them into a closed cycle. Minimise **cycle length + sum of the costs of the selected nodes**. Distances are Euclidean, rounded to the nearest integer.
@@ -36,7 +38,7 @@ Greedy cycle (start):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method.
+Objective = cycle length + sum of node costs, over 200 runs per method. The best value in each column is in bold.
 All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
 Results are identical in all implemented languages: **yes**.
 
@@ -46,16 +48,16 @@ Results are identical in all implemented languages: **yes**.
 |---|--:|--:|--:|:-:|
 | Random solution | 237131 | 287973 | 263514 | yes |
 | Nearest neighbor (end only) | 84362 | 90075 | 87477 | yes |
-| Nearest neighbor (any position) | 72328 | 77022 | 74347 | yes |
-| Greedy cycle | 72590 | 75281 | 73797 | yes |
+| Nearest neighbor (any position) | **72328** | 77022 | 74347 | yes |
+| Greedy cycle | 72590 | **75281** | **73797** | yes |
 
 ### Instance TSPB
 
 | Method | Min | Max | Avg | Best solution checked |
 |---|--:|--:|--:|:-:|
 | Random solution | 188214 | 231879 | 206802 | yes |
-| Nearest neighbor (end only) | 56007 | 63166 | 59397 | yes |
-| Nearest neighbor (any position) | 52915 | 66164 | 59475 | yes |
+| Nearest neighbor (end only) | 56007 | **63166** | **59397** | yes |
+| Nearest neighbor (any position) | **52915** | 66164 | 59475 | yes |
 | Greedy cycle | 53016 | 63736 | 59709 | yes |
 <!-- /auto:results -->
 
@@ -121,6 +123,4 @@ Source code of this lab: [labs/lab1](https://github.com/mi-zuri/ec-labs/tree/mai
 
 - Random solutions are about 3.5 times worse than any greedy method.
 - On TSPA, inserting at any position (nearest neighbour any position, greedy cycle) is clearly better than appending at the end (average about 74000 vs 87500).
-- On TSPA, nearest neighbour (any position) and greedy cycle are close (best 72328 vs 72590).
-- On TSPB all three greedy methods have similar averages (about 59500).
 - Greedy methods are deterministic given the start node, so the spread comes only from the start choice; trying every start and keeping the best is cheap and worthwhile.
