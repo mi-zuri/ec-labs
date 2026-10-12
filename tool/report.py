@@ -142,11 +142,12 @@ def build_blocks(lab, instances, out_dir):
         res.append(f"### Instance {inst}\n\n| Method | Min | Max | Avg | Best solution checked |\n|---|--:|--:|--:|:-:|")
         plots.append(f"### Instance {inst}\n")
         sols.append(f"### Instance {inst}\n")
+        rows = []  # (method name, [min, max, avg], checked) or (method name, None, None) when not run
         for m in lab["methods"]:
             r = pick(by.get(m["id"], {}))
             if r is None:
                 warnings.append(f"no benchmark results for {inst} / {m['name']}")
-                res.append(f"| {m['name']} | not run | | | |")
+                rows.append((m["name"], None, None))
                 continue
             langs = by[m["id"]]
             if len(langs) > 1:
@@ -155,18 +156,26 @@ def build_blocks(lab, instances, out_dir):
                                 for x in langs.values())
             all_checked &= bool(r["checked"])
             s, b = r["stats"], r["best"]
-            res.append(f"| {m['name']} | {s['obj_min']} | {s['obj_max']} | {s['obj_avg']:.0f} | {'yes' if r['checked'] else '**NO**'} |")
+            rows.append((m["name"], [s["obj_min"], s["obj_max"], round(s["obj_avg"])], r["checked"]))
             name = f"{inst}_{m['id']}.svg"
             with open(os.path.join(files_dir, name), "w") as f:
                 f.write(svg_plot(nodes, b["tour"]))
             plots.append(f"![{m['name']}: objective {b['obj']} (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
             sols.append(f"**{m['name']}** (objective {b['obj']}):\n{', '.join(map(str, b['tour']))}\n")
+        # objective is minimised, so the lowest value in each column is the best (ties are all bold)
+        best = [min((v[k] for _, v, _ in rows if v), default=None) for k in range(3)]
+        for mname, vals, checked in rows:
+            if vals is None:
+                res.append(f"| {mname} | not run | | | |")
+                continue
+            cells = [f"**{v}**" if v == best[k] else str(v) for k, v in enumerate(vals)]
+            res.append(f"| {mname} | {' | '.join(cells)} | {'yes' if checked else '**NO**'} |")
         res.append("")
         plots.append("")
 
     n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for by in [load_results(lab["id"], i)]
                                for langs in by.values() for r in langs.values()}))
-    summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method.\n"
+    summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method. The best value in each column is in bold.\n"
                f"All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **{'yes' if all_checked else 'NO'}**.")
     if multi_lang:
         summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
