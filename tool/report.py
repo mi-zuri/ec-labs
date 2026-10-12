@@ -5,7 +5,7 @@ Text outside the `<!-- auto:NAME -->` ... `<!-- /auto:NAME -->` blocks is never 
 The blocks (results, plots, solutions, source) are rebuilt from out/results on every run,
 and re-added at the end of the file if they were deleted, so the report always has every part.
 
-Everything lives in labs/labN/report/ (Report.md, Report.pdf, report_files/*.svg).
+Everything lives in labs/labN/report/ (Report.md, ReportLabN_<author>.pdf, report_files/*.svg).
 First generation starts from tool/report_template.md; algorithms and conclusions are written by hand in Report.md.
 """
 import glob
@@ -27,7 +27,8 @@ LANG_ORDER = ["python", "c", "cpp", "rust"]
 LANG_NAMES = {"python": "Python", "c": "C", "cpp": "C++", "rust": "Rust"}
 LANG_SRC = {"python": "python/solver.py", "c": "c/solver.c", "cpp": "cpp/solver.cpp", "rust": "rust/solver.rs"}
 
-MD_NAME, PDF_NAME, FILES_DIR, REPORT_DIR = "Report.md", "Report.pdf", "report_files", "report"
+MD_NAME, FILES_DIR, REPORT_DIR = "Report.md", "report_files", "report"
+PDF_AUTHOR = "MichałŻurawski"  # used in the PDF file name
 BLOCK_TITLES = {
     "results": "Results",
     "plots": "Visualisation of the best solutions",
@@ -336,6 +337,10 @@ img{{width:100%;border:1px solid #ddd}}p{{margin:.5em 0;overflow-wrap:anywhere}}
 
 # ---------------------------------------------------------------- PDF
 
+def pdf_name(lab):
+    return f"ReportLab{lab['num']}_{PDF_AUTHOR}.pdf"
+
+
 def find_chrome():
     cands = [os.environ.get("CHROME", ""),
              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -347,12 +352,12 @@ def find_chrome():
     return next((c for c in cands if c and os.path.isfile(c)), None)
 
 
-def write_pdf(out_dir, md_path):
-    """Render Report.md to Report.pdf with headless Chrome. Returns (pdf path or None, error or None)."""
+def write_pdf(out_dir, md_path, name):
+    """Render Report.md to the PDF `name` with headless Chrome. Returns (pdf path or None, error or None)."""
     chrome = find_chrome()
     if not chrome:
         return None, "PDF not created: Chrome/Chromium not found (set the CHROME environment variable to its path)"
-    pdf_path = os.path.join(out_dir, PDF_NAME)
+    pdf_path = os.path.join(out_dir, name)
     with tempfile.TemporaryDirectory() as tmp:
         page = os.path.join(tmp, "report.html")
         with open(page, "w", encoding="utf-8") as f:
@@ -371,15 +376,15 @@ def write_pdf(out_dir, md_path):
 # ---------------------------------------------------------------- entry points
 
 def status(lab):
-    md, pdf = os.path.join(report_dir(lab), MD_NAME), os.path.join(report_dir(lab), PDF_NAME)
-    return {"md": os.path.exists(md), "pdf": os.path.exists(pdf),
+    md, pdf = os.path.join(report_dir(lab), MD_NAME), os.path.join(report_dir(lab), pdf_name(lab))
+    return {"pdf_name": pdf_name(lab), "md": os.path.exists(md), "pdf": os.path.exists(pdf),
             "md_mtime": os.path.getmtime(md) if os.path.exists(md) else None,
             "pdf_mtime": os.path.getmtime(pdf) if os.path.exists(pdf) else None}
 
 
 def generate(lab, instances):
     md_path, created, warnings = write_markdown(lab, instances)
-    pdf_path, error = write_pdf(report_dir(lab), md_path)
+    pdf_path, error = write_pdf(report_dir(lab), md_path, pdf_name(lab))
     if error:
         warnings.append(error)
     return {"created": created, "warnings": warnings, **status(lab)}

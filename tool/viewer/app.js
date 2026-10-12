@@ -705,8 +705,8 @@ async function loadReport() {
   const r = await getJSON("/api/report?lab=" + id);
   if (S.lab.id !== id) return;
   $("report-gen").textContent = r.md ? "Regenerate report" : "Generate report";
-  $("report-gen").title = r.md ? "Rebuild the PDF from the Markdown, refreshing results and visualisations" : "Create Report.md and Report.pdf for this lab";
-  $("report-links").innerHTML = (r.pdf ? `<a class="chip-link" href="/report/${id}/Report.pdf" target="_blank">Open PDF</a>` : "")
+  $("report-gen").title = r.md ? "Rebuild the PDF from the Markdown, refreshing results and visualisations" : "Create Report.md and the PDF report for this lab";
+  $("report-links").innerHTML = (r.pdf ? `<a class="chip-link" href="/report/${id}/${encodeURIComponent(r.pdf_name)}" target="_blank">Open PDF</a>` : "")
     + (r.md ? `<button class="chip-link" id="report-edit">Edit</button>` : "");
   if (r.md) $("report-edit").addEventListener("click", editReport);
   $("report-file").textContent = r.md ? `File: labs/${id}/report/Report.md` : "";

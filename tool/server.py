@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 TOOL = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TOOL)  # project root
@@ -245,11 +245,12 @@ class Handler(BaseHTTPRequestHandler):
                 if not lab:
                     return self.send_json({"error": "unknown lab"}, 400)
                 return self.send_json({"text": report.read_text(os.path.join(report.report_dir(lab), report.MD_NAME))})
-            m = re.fullmatch(r"/report/(lab\d+)/(Report\.md|Report\.pdf|report_files/[\w.-]+\.svg)", url.path)
-            if m:
+            m = re.fullmatch(r"/report/(lab\d+)/(.+)", unquote(url.path))
+            lab = m and next((l for l in find_labs() if l["id"] == m.group(1)), None)
+            if lab and (m.group(2) in (report.MD_NAME, report.pdf_name(lab)) or re.fullmatch(r"report_files/[\w.-]+\.svg", m.group(2))):
                 path = os.path.join(LABS, m.group(1), "report", m.group(2))
                 if os.path.exists(path):
-                    ctype = {"md": "text/plain; charset=utf-8", "pdf": "application/pdf", "svg": "image/svg+xml"}[path[-3:]]
+                    ctype = {"md": "text/plain; charset=utf-8", "pdf": "application/pdf", "svg": "image/svg+xml"}[os.path.splitext(path)[1][1:]]
                     return self.send_file(path, ctype)
             self.send_json({"error": "not found"}, 404)
         except (BrokenPipeError, ConnectionResetError):

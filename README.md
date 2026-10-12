@@ -63,7 +63,7 @@ out/                      generated, safe to delete
 
 ## Reports
 
-Compare tab → **Generate report** creates `labs/labN/report/Report.md` and `Report.pdf` (plots in `report_files/`) (all instances, from the saved
+Compare tab → **Generate report** creates `labs/labN/report/Report.md` and `ReportLabN_MichałŻurawski.pdf` (plots in `report_files/`) (all instances, from the saved
 benchmarks); the button then becomes **Regenerate report**. Edit `Report.md` by hand, then regenerate:
 text outside the `<!-- auto:... -->` blocks is kept, while results, visualisations, best-solution lists and the
 GitHub source link (taken from the git remote) are rebuilt every time (a deleted block is re-added).
