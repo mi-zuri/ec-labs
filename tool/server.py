@@ -131,7 +131,11 @@ def ensure_built(lab, lang):
 # ---------------------------------------------------------------- checker + results
 
 def check_run(inst, msg):
-    """Independent solution checker: k distinct valid nodes and the reported objective is correct."""
+    """Independent solution checker: k distinct valid nodes and the reported objective is correct.
+
+    Same computation as the lecturer's Solution checker.xlsx: edge = INT(SQRT(dx^2+dy^2)+0.5) over the closed cycle,
+    objective = sum of edges + sum of node costs.
+    """
     tour = msg.get("tour", [])
     n, k, dist, nodes = inst["n"], inst["k"], inst["dist"], inst["nodes"]
     if len(tour) != k:

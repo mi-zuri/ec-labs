@@ -166,10 +166,10 @@ def build_blocks(lab, instances, out_dir):
 
     n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for by in [load_results(lab["id"], i)]
                                for langs in by.values() for r in langs.values()}))
-    summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method. "
-               f"All best solutions were checked with the solution checker: **{'yes' if all_checked else 'NO'}**.")
+    summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method.\n"
+               f"All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **{'yes' if all_checked else 'NO'}**.")
     if multi_lang:
-        summary += f" Results are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
+        summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
     plots_intro = "Node colour and size show the node cost (dark and large = expensive). Grey dots are nodes not selected."
 
     base, branch = github_base()
