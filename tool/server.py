@@ -28,6 +28,9 @@ BUILD = os.path.join(ROOT, "out", "build")
 RESULTS = os.path.join(ROOT, "out", "results")
 DEFAULT_SEED = 42
 
+sys.path.insert(0, TOOL)
+import report  # noqa: E402  (shared report generator)
+
 LANGS = {
     "python": {"name": "Python", "src": "python/solver.py", "tool": sys.executable},
     "c": {"name": "C", "src": "c/solver.c", "tool": "gcc"},
@@ -38,6 +41,7 @@ LANGS = {
 BUILD_LOCK = threading.Lock()  # one compiler at a time
 BENCH_LOCK = threading.Lock()  # one benchmark at a time, so timings are not disturbed
 INSTANCE_CACHE = {}
+REPORT_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------- catalog
@@ -227,6 +231,43 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(load_results(q.get("lab", ""), q.get("instance", "")))
             if url.path == "/api/run":
                 return self.api_run(q)
+            if url.path == "/api/report":
+                lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
+                if not lab:
+                    return self.send_json({"error": "unknown lab"}, 400)
+                return self.send_json(report.status(lab))
+            if url.path == "/api/report/md":
+                lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
+                if not lab:
+                    return self.send_json({"error": "unknown lab"}, 400)
+                return self.send_json({"text": report.read_text(os.path.join(report.report_dir(lab), report.MD_NAME))})
+            m = re.fullmatch(r"/report/(lab\d+)/(Report\.md|Report\.pdf|report_files/[\w.-]+\.svg)", url.path)
+            if m:
+                path = os.path.join(LABS, m.group(1), "report", m.group(2))
+                if os.path.exists(path):
+                    ctype = {"md": "text/plain; charset=utf-8", "pdf": "application/pdf", "svg": "image/svg+xml"}[path[-3:]]
+                    return self.send_file(path, ctype)
+            self.send_json({"error": "not found"}, 404)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def do_POST(self):
+        url = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(url.query).items()}
+        try:
+            if url.path == "/api/report":
+                lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
+                if not lab:
+                    return self.send_json({"error": "unknown lab"}, 400)
+                with REPORT_LOCK:
+                    return self.send_json(report.generate(lab, find_instances()))
+            if url.path == "/api/report/md":
+                lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
+                if not lab:
+                    return self.send_json({"error": "unknown lab"}, 400)
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                with REPORT_LOCK:
+                    return self.send_json(report.save_markdown(lab, body.decode("utf-8")))
             self.send_json({"error": "not found"}, 404)
         except (BrokenPipeError, ConnectionResetError):
             pass
