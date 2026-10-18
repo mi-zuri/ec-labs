@@ -31,6 +31,7 @@ MD_NAME, FILES_DIR, REPORT_DIR = "Report.md", "report_files", "report"
 PDF_AUTHOR = "MichałŻurawski"  # used in the PDF file name
 BLOCK_TITLES = {
     "results": "Results",
+    "times": "Running time",
     "plots": "Visualisation of the best solutions",
     "solutions": "Best solutions (0-based node indices)",
     "source": "Source code",
@@ -117,6 +118,17 @@ def svg_plot(nodes, tour):
     return "".join(out)
 
 
+def fmt_time(ns):
+    """Same units as the viewer's fmtTime."""
+    if ns < 1e3:
+        return f"{ns:.0f} ns"
+    if ns < 1e6:
+        return f"{ns / 1e3:.1f} µs"
+    if ns < 1e9:
+        return f"{ns / 1e6:.2f} ms"
+    return f"{ns / 1e9:.2f} s"
+
+
 # ---------------------------------------------------------------- generated blocks
 
 def report_dir(lab):
@@ -127,10 +139,38 @@ def block(name, body):
     return f"<!-- auto:{name} (generated: edits between these markers are overwritten) -->\n{body.strip()}\n<!-- /auto:{name} -->"
 
 
-def build_blocks(lab, instances, out_dir):
-    """Return ({block name: markdown}, [warnings]). Also writes the plot SVGs."""
+def entries_of(labs):
+    """(lab, method, display name) for every solution to compare. With several labs the name says which lab it comes from."""
+    many = len(labs) > 1
+    return [(l, m, f"Lab {l['num']}: {m['name']}" if many else m["name"]) for l in labs for m in l["methods"]]
+
+
+def time_section(inst, entries, by_lab):
+    """Markdown for one instance: table of the average time per run, methods by language."""
+    rows = []  # (method name, {lang: avg ns})
+    for lab, m, mname in entries:
+        by = {lang: r["stats"]["ns_avg"] for lang, r in by_lab[lab["id"]].get(m["id"], {}).items()}
+        if by:
+            rows.append((mname, by))
+    if not rows:
+        return f"### Instance {inst}\n\nno benchmark results\n"
+    langs = [l for l in LANG_ORDER if any(l in by for _, by in rows)]
+    table = ["| Method | " + " | ".join(LANG_NAMES[l] for l in langs) + " |", "|---|" + "--:|" * len(langs)]
+    for mname, by in rows:
+        fastest = min(by.values())
+        table.append(f"| {mname} | " + " | ".join(
+            "" if l not in by else f"**{fmt_time(by[l])}**" if by[l] == fastest else fmt_time(by[l]) for l in langs) + " |")
+    return f"### Instance {inst}\n\n" + "\n".join(table) + "\n"
+
+
+def build_blocks(labs, instances, out_dir):
+    """Return ({block name: markdown}, [warnings]). Also writes the plot SVGs.
+
+    `labs` are the labs whose solutions are compared (the report's own lab is normally one of them).
+    """
     warnings = []
-    res, plots, sols = [], [], []
+    entries = entries_of(labs)
+    res, times, plots, sols = [], [], [], []
     files_dir = os.path.join(out_dir, FILES_DIR)
     os.makedirs(files_dir, exist_ok=True)
     for old in glob.glob(os.path.join(files_dir, "*.svg")):
@@ -138,17 +178,19 @@ def build_blocks(lab, instances, out_dir):
 
     all_checked, all_same, multi_lang = True, True, False
     for inst in instances:
-        by = load_results(lab["id"], inst)
+        by_lab = {l["id"]: load_results(l["id"], inst) for l in labs}
         nodes = load_nodes(inst)
         res.append(f"### Instance {inst}\n\n| Method | Min | Max | Avg | Best solution checked |\n|---|--:|--:|--:|:-:|")
         plots.append(f"### Instance {inst}\n")
+        times.append(time_section(inst, entries, by_lab))
         sols.append(f"### Instance {inst}\n")
         rows = []  # (method name, [min, max, avg], checked) or (method name, None, None) when not run
-        for m in lab["methods"]:
+        for lab, m, mname in entries:
+            by = by_lab[lab["id"]]
             r = pick(by.get(m["id"], {}))
             if r is None:
-                warnings.append(f"no benchmark results for {inst} / {m['name']}")
-                rows.append((m["name"], None, None))
+                warnings.append(f"no benchmark results for {inst} / {mname}")
+                rows.append((mname, None, None))
                 continue
             langs = by[m["id"]]
             if len(langs) > 1:
@@ -157,12 +199,12 @@ def build_blocks(lab, instances, out_dir):
                                 for x in langs.values())
             all_checked &= bool(r["checked"])
             s, b = r["stats"], r["best"]
-            rows.append((m["name"], [s["obj_min"], s["obj_max"], round(s["obj_avg"])], r["checked"]))
-            name = f"{inst}_{m['id']}.svg"
+            rows.append((mname, [s["obj_min"], s["obj_max"], round(s["obj_avg"])], r["checked"]))
+            name = f"{inst}_{lab['id']}_{m['id']}.svg"
             with open(os.path.join(files_dir, name), "w") as f:
                 f.write(svg_plot(nodes, b["tour"]))
-            plots.append(f"![{m['name']}: objective {b['obj']} (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
-            sols.append(f"**{m['name']}** (objective {b['obj']}):\n{', '.join(map(str, b['tour']))}\n")
+            plots.append(f"![{mname}: objective {b['obj']} (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
+            sols.append(f"**{mname}** (objective {b['obj']}):\n{', '.join(map(str, b['tour']))}\n")
         # objective is minimised, so the lowest value in each column is the best (ties are all bold)
         best = [min((v[k] for _, v, _ in rows if v), default=None) for k in range(3)]
         for mname, vals, checked in rows:
@@ -174,24 +216,30 @@ def build_blocks(lab, instances, out_dir):
         res.append("")
         plots.append("")
 
-    n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for by in [load_results(lab["id"], i)]
+    n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for l in labs for by in [load_results(l["id"], i)]
                                for langs in by.values() for r in langs.values()}))
     summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method. The best value in each column is in bold.\n"
                f"All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **{'yes' if all_checked else 'NO'}**.")
     if multi_lang:
         summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
+    times_intro = ("Average time of one run of the algorithm only, over the same runs as above. "
+                   "The fastest language in each row is in bold.")
     plots_intro = "Node colour and size show the node cost (dark and large = expensive). Grey dots are nodes not selected."
 
     base, branch = github_base()
-    rel = f"labs/{lab['id']}"
-    if base:
-        links = [f"[{LANG_NAMES[l]}]({base}/blob/{branch}/{rel}/{LANG_SRC[l]})" for l in LANG_ORDER if l in lab["langs"]]
-        source = f"Source code of this lab: [{rel}]({base}/tree/{branch}/{rel}) ({', '.join(links)})."
-    else:
-        source = f"Source code of this lab: `{rel}/` (no GitHub remote found, so no link)."
+    source_lines = []
+    for lab in labs:
+        rel = f"labs/{lab['id']}"
+        if base:
+            links = [f"[{LANG_NAMES[l]}]({base}/blob/{branch}/{rel}/{LANG_SRC[l]})" for l in LANG_ORDER if l in lab["langs"]]
+            source_lines.append(f"- Lab {lab['num']}: [{rel}]({base}/tree/{branch}/{rel}) ({', '.join(links)})")
+        else:
+            source_lines.append(f"- Lab {lab['num']}: `{rel}/` (no GitHub remote found, so no link)")
+    source = "Source code of the compared labs:\n\n" + "\n".join(source_lines)
 
     return {
         "results": summary + "\n\n" + "\n".join(res),
+        "times": times_intro + "\n\n" + "\n".join(times),
         "plots": plots_intro + "\n\n" + "\n".join(plots),
         "solutions": "\n".join(sols),
         "source": source,
@@ -204,14 +252,14 @@ def first_text(lab):
     return read_text(TEMPLATE).replace("{{title}}", "Lab %d - %s" % (lab["num"], lab["title"]))
 
 
-def write_markdown(lab, instances):
+def write_markdown(lab, instances, labs):
     """Create or refresh Report.md. Returns (path, created, warnings)."""
     out_dir = report_dir(lab)
     os.makedirs(out_dir, exist_ok=True)
     md_path = os.path.join(out_dir, MD_NAME)
     created = not os.path.exists(md_path)
     text = first_text(lab) if created else read_text(md_path)
-    blocks, warnings = build_blocks(lab, instances, out_dir)
+    blocks, warnings = build_blocks(labs, instances, out_dir)
 
     seen = set()
 
@@ -254,17 +302,17 @@ def markdown_to_html(md, base_dir, title):
     sec = {"at": None}  # index in `out` where the current ### block started
 
     def close_block():
-        """Wrap a ### block in a div; blocks with a table or figure grid are kept on one page."""
+        """Wrap a ### block in a div; blocks with a table are kept on one page (figure grids may continue on the next page, row by row)."""
         if sec["at"] is not None:
             chunk = out[sec["at"]:]
-            keep = any(c.startswith("<table") or c.startswith('<div class="grid"') for c in chunk)
+            keep = any(c.startswith("<table") for c in chunk)
             out[sec["at"]:] = ['<div class="%s">' % ("blk keep" if keep else "blk") + "".join(chunk) + "</div>"]
             sec["at"] = None
 
     def flush():
         if para:
             if all(p.startswith("![") for p in para):
-                out.append('<div class="grid">' + inline("".join(para)) + "</div>")
+                out.append('<div class="grid%s">' % (" one" if len(para) == 1 else "") + inline("".join(para)) + "</div>")
             else:
                 out.append("<p>" + inline("\n".join(para)).replace("\n", "<br>") + "</p>")
             para.clear()
@@ -280,8 +328,8 @@ def markdown_to_html(md, base_dir, title):
             i = j + 1
         elif line.lstrip().startswith("<!--"):
             flush()
-            if re.match(r"\s*<!-- auto:(results|plots)\b", line) and out and out[-1].startswith("<h2>"):
-                out[-1] = out[-1].replace("<h2>", '<h2 class="pb">', 1)  # new page before the Results / Visualisation sections
+            if re.match(r"\s*<!-- auto:(results|times|plots|solutions)\b", line) and out and out[-1].startswith("<h2>"):
+                out[-1] = out[-1].replace("<h2>", '<h2 class="pb">', 1)  # new page before the Results, Running time, Visualisation and Best solutions sections
             while "-->" not in lines[i]:
                 i += 1
             i += 1
@@ -330,7 +378,7 @@ h1{{font-size:24px;margin:0 0 .3em}}h2{{font-size:18px;border-bottom:1px solid #
 h2.pb{{break-before:page}}h3{{font-size:15px;margin:1.3em 0 .4em}}h2,h3{{break-after:avoid}}
 table{{break-inside:avoid;border-collapse:collapse;margin:.5em 0}}td,th{{border:1px solid #ccc;padding:4px 9px}}th{{background:#f3f3f3;text-align:left}}
 pre{{background:#f5f5f5;padding:9px;font-size:11px;white-space:pre-wrap;break-inside:avoid}}code{{background:#f0f0f0;padding:0 3px}}
-.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}figure{{margin:0;text-align:center;font-size:11px;break-inside:avoid}}
+.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:84%;margin:0 auto}}.grid.one{{grid-template-columns:1fr}}figure{{margin:0;text-align:center;font-size:11px;break-inside:avoid}}
 img{{width:100%;border:1px solid #ddd}}p{{margin:.5em 0;overflow-wrap:anywhere}}a{{color:#1a55a5}}
 </style></head><body>{body}</body></html>"""
 
@@ -382,8 +430,9 @@ def status(lab):
             "pdf_mtime": os.path.getmtime(pdf) if os.path.exists(pdf) else None}
 
 
-def generate(lab, instances):
-    md_path, created, warnings = write_markdown(lab, instances)
+def generate(lab, instances, labs=None):
+    """Build the report of `lab`, comparing the solutions of `labs` (default: just `lab`)."""
+    md_path, created, warnings = write_markdown(lab, instances, labs or [lab])
     pdf_path, error = write_pdf(report_dir(lab), md_path, pdf_name(lab))
     if error:
         warnings.append(error)
@@ -402,6 +451,7 @@ if __name__ == "__main__":  # python3 tool/report.py lab1
     import server
     labs = {l["id"]: l for l in server.find_labs()}
     target = labs.get(sys.argv[1] if len(sys.argv) > 1 else "")
-    if not target:
-        sys.exit("usage: python3 tool/report.py <labN>   (known: %s)" % ", ".join(labs))
-    print(json.dumps(generate(target, server.find_instances()), indent=1))
+    included = [labs.get(a) for a in sys.argv[2:]]
+    if not target or None in included:
+        sys.exit("usage: python3 tool/report.py <labN> [labM ...]   (report of labN comparing the listed labs, default labN; known: %s)" % ", ".join(labs))
+    print(json.dumps(generate(target, server.find_instances(), included or [target]), indent=1))

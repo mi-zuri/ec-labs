@@ -231,8 +231,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"error": "unknown instance"}, 404)
                 inst = load_instance(q["name"])
                 return self.send_json({"name": q["name"], "nodes": inst["nodes"], "k": inst["k"]})
-            if url.path == "/api/results":
-                return self.send_json(load_results(q.get("lab", ""), q.get("instance", "")))
+            if url.path == "/api/results":  # lab = comma-separated lab ids
+                return self.send_json([r for lab_id in q.get("lab", "").split(",") for r in load_results(lab_id, q.get("instance", ""))])
             if url.path == "/api/run":
                 return self.api_run(q)
             if url.path == "/api/report":
@@ -264,8 +264,12 @@ class Handler(BaseHTTPRequestHandler):
                 lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
                 if not lab:
                     return self.send_json({"error": "unknown lab"}, 400)
+                known = {l["id"]: l for l in find_labs()}
+                included = [known[i] for i in q.get("include", lab["id"]).split(",") if i in known]
+                if not included:
+                    return self.send_json({"error": "select at least one lab to compare"}, 400)
                 with REPORT_LOCK:
-                    return self.send_json(report.generate(lab, find_instances()))
+                    return self.send_json(report.generate(lab, find_instances(), included))
             if url.path == "/api/report/md":
                 lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
                 if not lab:

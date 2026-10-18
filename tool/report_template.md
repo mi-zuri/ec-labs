@@ -15,6 +15,11 @@ _TODO: describe the implemented algorithms and give their pseudocode._
 <!-- auto:results -->
 <!-- /auto:results -->
 
+## Running time
+
+<!-- auto:times -->
+<!-- /auto:times -->
+
 ## Visualisation of the best solutions
 
 <!-- auto:plots -->
