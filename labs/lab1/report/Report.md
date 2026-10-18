@@ -61,6 +61,30 @@ Results are identical in all implemented languages: **yes**.
 | Greedy cycle | 53016 | 63736 | 59709 | yes |
 <!-- /auto:results -->
 
+## Running time
+
+<!-- auto:times (generated: edits between these markers are overwritten) -->
+Average time of one run of the algorithm only, over the same runs as above. The fastest language in each row is in bold.
+
+### Instance TSPA
+
+| Method | Python | C | C++ | Rust |
+|---|--:|--:|--:|--:|
+| Random solution | 77.6 µs | 380 ns | 321 ns | **295 ns** |
+| Nearest neighbor (end only) | 374.0 µs | **14.0 µs** | 20.4 µs | 23.5 µs |
+| Nearest neighbor (any position) | 24.39 ms | 534.2 µs | **481.1 µs** | 567.2 µs |
+| Greedy cycle | 22.58 ms | 687.4 µs | **462.6 µs** | 648.7 µs |
+
+### Instance TSPB
+
+| Method | Python | C | C++ | Rust |
+|---|--:|--:|--:|--:|
+| Random solution | 70.2 µs | **425 ns** | 481 ns | 500 ns |
+| Nearest neighbor (end only) | 360.0 µs | **15.6 µs** | 24.0 µs | 18.3 µs |
+| Nearest neighbor (any position) | 23.51 ms | 529.4 µs | **515.9 µs** | 561.6 µs |
+| Greedy cycle | 21.92 ms | 541.8 µs | **464.2 µs** | 639.2 µs |
+<!-- /auto:times -->
+
 ## Visualisation of the best solutions
 
 <!-- auto:plots (generated: edits between these markers are overwritten) -->
@@ -68,17 +92,17 @@ Node colour and size show the node cost (dark and large = expensive). Grey dots 
 
 ### Instance TSPA
 
-![Random solution: objective 237131 (length 140636 + cost 96495)](report_files/TSPA_random.svg)
-![Nearest neighbor (end only): objective 84362 (length 31319 + cost 53043)](report_files/TSPA_nn_end.svg)
-![Nearest neighbor (any position): objective 72328 (length 21816 + cost 50512)](report_files/TSPA_nn_any.svg)
-![Greedy cycle: objective 72590 (length 21570 + cost 51020)](report_files/TSPA_greedy_cycle.svg)
+![Random solution: objective 237131 (length 140636 + cost 96495)](report_files/TSPA_lab1_random.svg)
+![Nearest neighbor (end only): objective 84362 (length 31319 + cost 53043)](report_files/TSPA_lab1_nn_end.svg)
+![Nearest neighbor (any position): objective 72328 (length 21816 + cost 50512)](report_files/TSPA_lab1_nn_any.svg)
+![Greedy cycle: objective 72590 (length 21570 + cost 51020)](report_files/TSPA_lab1_greedy_cycle.svg)
 
 ### Instance TSPB
 
-![Random solution: objective 188214 (length 138112 + cost 50102)](report_files/TSPB_random.svg)
-![Nearest neighbor (end only): objective 56007 (length 24632 + cost 31375)](report_files/TSPB_nn_end.svg)
-![Nearest neighbor (any position): objective 52915 (length 20068 + cost 32847)](report_files/TSPB_nn_any.svg)
-![Greedy cycle: objective 53016 (length 16704 + cost 36312)](report_files/TSPB_greedy_cycle.svg)
+![Random solution: objective 188214 (length 138112 + cost 50102)](report_files/TSPB_lab1_random.svg)
+![Nearest neighbor (end only): objective 56007 (length 24632 + cost 31375)](report_files/TSPB_lab1_nn_end.svg)
+![Nearest neighbor (any position): objective 52915 (length 20068 + cost 32847)](report_files/TSPB_lab1_nn_any.svg)
+![Greedy cycle: objective 53016 (length 16704 + cost 36312)](report_files/TSPB_lab1_greedy_cycle.svg)
 <!-- /auto:plots -->
 
 ## Best solutions (0-based node indices)
@@ -116,7 +140,9 @@ Node colour and size show the node cost (dark and large = expensive). Grey dots 
 ## Source code
 
 <!-- auto:source (generated: edits between these markers are overwritten) -->
-Source code of this lab: [labs/lab1](https://github.com/mi-zuri/ec-labs/tree/main/labs/lab1) ([Python](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/python/solver.py), [C](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/c/solver.c), [C++](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/cpp/solver.cpp), [Rust](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/rust/solver.rs)).
+Source code of the compared labs:
+
+- Lab 1: [labs/lab1](https://github.com/mi-zuri/ec-labs/tree/main/labs/lab1) ([Python](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/python/solver.py), [C](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/c/solver.c), [C++](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/cpp/solver.cpp), [Rust](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/rust/solver.rs))
 <!-- /auto:source -->
 
 ## Conclusions
