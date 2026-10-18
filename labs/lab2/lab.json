@@ -1,0 +1,9 @@
+{
+  "title": "Greedy regret heuristics",
+  "methods": [
+    { "id": "nn_regret", "name": "Nearest neighbor (any position), 2-regret", "shape": "path" },
+    { "id": "nn_weighted", "name": "Nearest neighbor (any position), 2-regret + best change", "shape": "path" },
+    { "id": "gc_regret", "name": "Greedy cycle, 2-regret", "shape": "cycle" },
+    { "id": "gc_weighted", "name": "Greedy cycle, 2-regret + best change", "shape": "cycle" }
+  ]
+}
