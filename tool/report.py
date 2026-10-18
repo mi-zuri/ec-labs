@@ -140,9 +140,8 @@ def block(name, body):
 
 
 def entries_of(labs):
-    """(lab, method, display name) for every solution to compare. With several labs the name says which lab it comes from."""
-    many = len(labs) > 1
-    return [(l, m, f"Lab {l['num']}: {m['name']}" if many else m["name"]) for l in labs for m in l["methods"]]
+    """(lab, method, display name) for every solution to compare."""
+    return [(l, m, m["name"]) for l in labs for m in l["methods"]]
 
 
 def time_section(inst, entries, by_lab):
@@ -203,8 +202,8 @@ def build_blocks(labs, instances, out_dir):
             name = f"{inst}_{lab['id']}_{m['id']}.svg"
             with open(os.path.join(files_dir, name), "w") as f:
                 f.write(svg_plot(nodes, b["tour"]))
-            plots.append(f"![{mname}: objective {b['obj']} (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
-            sols.append(f"**{mname}** (objective {b['obj']}):\n{', '.join(map(str, b['tour']))}\n")
+            plots.append(f"![{mname}<br>**{b['obj']}** (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
+            sols.append(f"**{mname}**\n{', '.join(map(str, b['tour']))}\n")
         # objective is minimised, so the lowest value in each column is the best (ties are all bold)
         best = [min((v[k] for _, v, _ in rows if v), default=None) for k in range(3)]
         for mname, vals, checked in rows:
@@ -287,7 +286,8 @@ def inline(s):
     codes = []
     s = re.sub(r"`([^`]+)`", lambda m: codes.append(html.escape(m.group(1))) or f"\0{len(codes) - 1}\0", s)
     s = html.escape(s, quote=False)
-    s = re.sub(r"!\[(.*?)\]\((.*?)\)", lambda m: f'<figure><img src="{m.group(2)}" alt="{m.group(1)}"><figcaption>{m.group(1)}</figcaption></figure>', s)
+    s = re.sub(r"!\[(.*?)\]\((.*?)\)", lambda m: f'<figure><img src="{m.group(2)}" alt="{re.sub(r"&lt;br&gt;|[*]{2}", " ", m.group(1))}">'
+               f'<figcaption>{m.group(1).replace("&lt;br&gt;", "<br>")}</figcaption></figure>', s)
     s = re.sub(r"\[(.*?)\]\((.*?)\)", r'<a href="\2">\1</a>', s)
     s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
     s = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", s)
@@ -299,14 +299,17 @@ def markdown_to_html(md, base_dir, title):
     lines = md.splitlines()
     out, i = [], 0
     para = []
-    sec = {"at": None}  # index in `out` where the current ### block started
+    sec = {"at": None, "n": 0, "first": True}  # index in `out` where the current ### block started; ### blocks seen in this ## section
 
     def close_block():
         """Wrap a ### block in a div; blocks with a table are kept on one page (figure grids may continue on the next page, row by row)."""
         if sec["at"] is not None:
             chunk = out[sec["at"]:]
             keep = any(c.startswith("<table") for c in chunk)
+            new_page = not sec["first"] and "".join(chunk).count("<figure>") > 4  # many plots: each instance but the first starts a page
             out[sec["at"]:] = ['<div class="%s">' % ("blk keep" if keep else "blk") + "".join(chunk) + "</div>"]
+            if new_page:
+                out[sec["at"]] = out[sec["at"]].replace('class="blk', 'class="pbk blk', 1)
             sec["at"] = None
 
     def flush():
@@ -328,8 +331,8 @@ def markdown_to_html(md, base_dir, title):
             i = j + 1
         elif line.lstrip().startswith("<!--"):
             flush()
-            if re.match(r"\s*<!-- auto:(results|times|plots|solutions)\b", line) and out and out[-1].startswith("<h2>"):
-                out[-1] = out[-1].replace("<h2>", '<h2 class="pb">', 1)  # new page before the Results, Running time, Visualisation and Best solutions sections
+            if re.match(r"\s*<!-- auto:(results|times|plots|solutions|source)\b", line) and out and out[-1].startswith("<h2>"):
+                out[-1] = out[-1].replace("<h2>", '<h2 class="pb">', 1)  # new page before the Results, Running time, Visualisation, Best solutions and Source code sections
             while "-->" not in lines[i]:
                 i += 1
             i += 1
@@ -337,7 +340,11 @@ def markdown_to_html(md, base_dir, title):
             flush()
             if len(m.group(1)) <= 3:
                 close_block()
+            if len(m.group(1)) == 2:
+                sec["n"] = 0
             if len(m.group(1)) == 3:
+                sec["first"] = sec["n"] == 0
+                sec["n"] += 1
                 sec["at"] = len(out)
             out.append(f"<h{len(m.group(1))}>{inline(m.group(2))}</h{len(m.group(1))}>")
             i += 1
@@ -375,10 +382,10 @@ def markdown_to_html(md, base_dir, title):
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(title)}</title><style>
 body{{font:13px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#222;margin:0}}
 h1{{font-size:24px;margin:0 0 .3em}}h2{{font-size:18px;border-bottom:1px solid #ddd;padding-bottom:3px;margin-top:1.8em}}
-h2.pb{{break-before:page}}h3{{font-size:15px;margin:1.3em 0 .4em}}h2,h3{{break-after:avoid}}
+h2.pb,.pbk{{break-before:page}}h3{{font-size:15px;margin:1.3em 0 .4em}}h2,h3{{break-after:avoid}}
 table{{break-inside:avoid;border-collapse:collapse;margin:.5em 0}}td,th{{border:1px solid #ccc;padding:4px 9px}}th{{background:#f3f3f3;text-align:left}}
 pre{{background:#f5f5f5;padding:9px;font-size:11px;white-space:pre-wrap;break-inside:avoid}}code{{background:#f0f0f0;padding:0 3px}}
-.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:84%;margin:0 auto}}.grid.one{{grid-template-columns:1fr}}figure{{margin:0;text-align:center;font-size:11px;break-inside:avoid}}
+.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}}.grid.one{{grid-template-columns:1fr;width:25%;margin:0 auto}}figure{{margin:0;text-align:center;font-size:9px;break-inside:avoid}}
 img{{width:100%;border:1px solid #ddd}}p{{margin:.5em 0;overflow-wrap:anywhere}}a{{color:#1a55a5}}
 </style></head><body>{body}</body></html>"""
 
