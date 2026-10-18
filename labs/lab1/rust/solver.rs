@@ -1,4 +1,7 @@
-//! Lab 1 - greedy heuristics: random, nearest neighbor (end / any position), greedy cycle.
+//! Lab 1 - greedy heuristics: random, nn_end, nn_any, greedy_cycle.
+//!
+//! Greedy run i starts from node i. Each step adds the unused node with the smallest
+//! (tour length increase + node cost); ties go to the lowest node, then lowest position.
 #[path = "../../../common/rust/tsp.rs"]
 mod tsp;
 
@@ -6,156 +9,186 @@ use tsp::{emit_step, Instance, Rng};
 
 const RANDOM_RUNS: usize = 200;
 
-fn random_solution(inst: &Instance, seed: u64, trace: bool) -> Vec<usize> {
+/// A tour under construction, plus which nodes are already in it.
+struct Builder<'a> {
+    instance: &'a Instance,
+    trace: bool,
+    nodes: Vec<usize>,
+    /// `used[v]` is true if node v is in the tour.
+    used: Vec<bool>,
+}
+
+/// Where a node would be inserted and how much that lengthens the tour.
+struct Position {
+    index: usize,
+    length_increase: i64,
+}
+
+/// The node to add next and where to put it.
+struct Insertion {
+    node: usize,
+    position: usize,
+}
+
+impl<'a> Builder<'a> {
+    fn new(instance: &'a Instance, start: usize, trace: bool) -> Builder<'a> {
+        let mut used = vec![false; instance.n];
+        used[start] = true;
+        let builder = Builder { instance, trace, nodes: vec![start], used };
+        if trace {
+            emit_step(&builder.nodes);
+        }
+        builder
+    }
+
+    fn length(&self) -> usize {
+        self.nodes.len()
+    }
+
+    fn add_node(&mut self, position: usize, node: usize) {
+        self.nodes.insert(position, node);
+        self.used[node] = true;
+        if self.trace {
+            emit_step(&self.nodes);
+        }
+    }
+
+    /// Unused node u minimizing d(from_node, u) + cost[u].
+    fn nearest_unused_node(&self, from_node: usize) -> usize {
+        let instance = self.instance;
+        let mut best_node = 0;
+        let mut best_value = i64::MAX;
+        for u in 0..instance.n {
+            if self.used[u] {
+                continue;
+            }
+            let value = instance.d(from_node, u) + instance.cost[u];
+            if value < best_value {
+                best_node = u;
+                best_value = value;
+            }
+        }
+        best_node
+    }
+
+    /// Index 0 is before the first node, `length` is after the last one.
+    fn cheapest_position_in_path(&self, node: usize) -> Position {
+        let instance = self.instance;
+        let nodes = &self.nodes;
+        let length = nodes.len();
+        let mut best = Position { index: 0, length_increase: i64::MAX };
+
+        for p in 0..=length {
+            let increase = if p == 0 {
+                instance.d(node, nodes[0])
+            } else if p == length {
+                instance.d(nodes[length - 1], node)
+            } else {
+                let (before, after) = (nodes[p - 1], nodes[p]);
+                instance.d(before, node) + instance.d(node, after) - instance.d(before, after)
+            };
+            if increase < best.length_increase {
+                best = Position { index: p, length_increase: increase };
+            }
+        }
+        best
+    }
+
+    /// Edge i is nodes[i] -> nodes[i+1] (the last wraps to nodes[0]); inserting there gives index i + 1.
+    fn cheapest_position_in_cycle(&self, node: usize) -> Position {
+        let instance = self.instance;
+        let nodes = &self.nodes;
+        let length = nodes.len();
+        let mut best = Position { index: 0, length_increase: i64::MAX };
+
+        for i in 0..length {
+            let (before, after) = (nodes[i], nodes[(i + 1) % length]);
+            let increase = instance.d(before, node) + instance.d(node, after) - instance.d(before, after);
+            if increase < best.length_increase {
+                best = Position { index: i + 1, length_increase: increase };
+            }
+        }
+        best
+    }
+
+    /// Unused node and position with the smallest total cost of adding.
+    fn cheapest_insertion(&self, cheapest_position: impl Fn(&Self, usize) -> Position) -> Insertion {
+        let instance = self.instance;
+        let mut best = Insertion { node: 0, position: 0 };
+        let mut best_value = i64::MAX;
+
+        for u in 0..instance.n {
+            if self.used[u] {
+                continue;
+            }
+            let position = cheapest_position(self, u);
+            let value = position.length_increase + instance.cost[u];
+            if value < best_value {
+                best = Insertion { node: u, position: position.index };
+                best_value = value;
+            }
+        }
+        best
+    }
+}
+
+fn random_solution(instance: &Instance, seed: u64, trace: bool) -> Vec<usize> {
     let mut rng = Rng::new(seed);
-    let mut perm: Vec<usize> = (0..inst.n).collect();
-    rng.shuffle(&mut perm);
-    perm.truncate(inst.k);
+    let mut nodes: Vec<usize> = (0..instance.n).collect();
+    rng.shuffle(&mut nodes);
+    nodes.truncate(instance.k);
+
     if trace {
-        for m in 1..=inst.k {
-            emit_step(&perm[..m]);
+        for length in 1..=instance.k {
+            emit_step(&nodes[..length]);
         }
     }
-    perm
+    nodes
 }
 
-/// Append the node with the best (distance from last node + node cost).
-fn nn_end(inst: &Instance, start: usize, trace: bool) -> Vec<usize> {
-    let mut used = vec![false; inst.n];
-    let mut tour = vec![start];
-    used[start] = true;
-    if trace {
-        emit_step(&tour);
+/// Append the nearest unused node to the end of the path.
+fn nn_end(instance: &Instance, start: usize, trace: bool) -> Vec<usize> {
+    let mut path = Builder::new(instance, start, trace);
+
+    while path.length() < instance.k {
+        let last = path.nodes[path.length() - 1];
+        let node = path.nearest_unused_node(last);
+        path.add_node(path.length(), node);
     }
-    while tour.len() < inst.k {
-        let last = tour[tour.len() - 1];
-        let mut best = i64::MAX;
-        let mut best_u = 0;
-        for u in 0..inst.n {
-            if used[u] {
-                continue;
-            }
-            let delta = inst.d(last, u) + inst.cost[u];
-            if delta < best {
-                best = delta;
-                best_u = u;
-            }
-        }
-        tour.push(best_u);
-        used[best_u] = true;
-        if trace {
-            emit_step(&tour);
-        }
-    }
-    tour
+    path.nodes
 }
 
-/// Insert the best node at the best position of the path: front, between two nodes, or end.
-fn nn_any(inst: &Instance, start: usize, trace: bool) -> Vec<usize> {
-    let mut used = vec![false; inst.n];
-    let mut tour = vec![start];
-    used[start] = true;
-    if trace {
-        emit_step(&tour);
+/// Insert the best node at the best position of the path.
+fn nn_any(instance: &Instance, start: usize, trace: bool) -> Vec<usize> {
+    let mut path = Builder::new(instance, start, trace);
+
+    while path.length() < instance.k {
+        let next = path.cheapest_insertion(Builder::cheapest_position_in_path);
+        path.add_node(next.position, next.node);
     }
-    while tour.len() < inst.k {
-        let m = tour.len();
-        let mut best = i64::MAX;
-        let mut best_u = 0;
-        let mut best_pos = 0;
-        for u in 0..inst.n {
-            if used[u] {
-                continue;
-            }
-            for p in 0..=m {
-                // p = index u is inserted at
-                let length_delta = if p == 0 {
-                    inst.d(u, tour[0])
-                } else if p == m {
-                    inst.d(tour[m - 1], u)
-                } else {
-                    inst.d(tour[p - 1], u) + inst.d(u, tour[p]) - inst.d(tour[p - 1], tour[p])
-                };
-                let delta = length_delta + inst.cost[u];
-                if delta < best {
-                    best = delta;
-                    best_u = u;
-                    best_pos = p;
-                }
-            }
-        }
-        tour.insert(best_pos, best_u);
-        used[best_u] = true;
-        if trace {
-            emit_step(&tour);
-        }
-    }
-    tour
+    path.nodes
 }
 
-/// Start from the best pair, then repeatedly insert the best node into the best edge of the cycle.
-fn greedy_cycle(inst: &Instance, start: usize, trace: bool) -> Vec<usize> {
-    let mut used = vec![false; inst.n];
-    let mut tour = vec![start];
-    used[start] = true;
-    if trace {
-        emit_step(&tour);
-    }
+/// Start from the best pair, then insert the best node into the best edge of the cycle.
+fn greedy_cycle(instance: &Instance, start: usize, trace: bool) -> Vec<usize> {
+    let mut cycle = Builder::new(instance, start, trace);
 
-    let mut best = i64::MAX;
-    let mut best_u = 0;
-    for u in 0..inst.n {
-        if used[u] {
-            continue;
-        }
-        let delta = inst.d(start, u) + inst.cost[u];
-        if delta < best {
-            best = delta;
-            best_u = u;
-        }
-    }
-    tour.push(best_u);
-    used[best_u] = true;
-    if trace {
-        emit_step(&tour);
-    }
+    let partner = cycle.nearest_unused_node(start);
+    cycle.add_node(cycle.length(), partner);
 
-    while tour.len() < inst.k {
-        let m = tour.len();
-        let mut best = i64::MAX;
-        let mut best_u = 0;
-        let mut best_pos = 0;
-        for u in 0..inst.n {
-            if used[u] {
-                continue;
-            }
-            for i in 0..m {
-                // edge tour[i] -> tour[i+1], incl. the closing edge
-                let a = tour[i];
-                let b = tour[(i + 1) % m];
-                let delta = inst.d(a, u) + inst.d(u, b) - inst.d(a, b) + inst.cost[u];
-                if delta < best {
-                    best = delta;
-                    best_u = u;
-                    best_pos = i + 1;
-                }
-            }
-        }
-        tour.insert(best_pos, best_u);
-        used[best_u] = true;
-        if trace {
-            emit_step(&tour);
-        }
+    while cycle.length() < instance.k {
+        let next = cycle.cheapest_insertion(Builder::cheapest_position_in_cycle);
+        cycle.add_node(next.position, next.node);
     }
-    tour
+    cycle.nodes
 }
 
-fn solve(inst: &Instance, method: &str, run: usize, seed: u64, trace: bool) -> Vec<usize> {
+fn solve(instance: &Instance, method: &str, run: usize, seed: u64, trace: bool) -> Vec<usize> {
     match method {
-        "random" => random_solution(inst, seed, trace),
-        "nn_end" => nn_end(inst, run, trace),
-        "nn_any" => nn_any(inst, run, trace),
-        _ => greedy_cycle(inst, run, trace),
+        "random" => random_solution(instance, seed, trace),
+        "nn_end" => nn_end(instance, run, trace),
+        "nn_any" => nn_any(instance, run, trace),
+        _ => greedy_cycle(instance, run, trace),
     }
 }
 

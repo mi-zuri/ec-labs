@@ -1,121 +1,186 @@
-/* Lab 1 - greedy heuristics: random, nearest neighbor (end / any position), greedy cycle. */
+/* Lab 1 - greedy heuristics: random, nn_end, nn_any, greedy_cycle.
+ *
+ * Greedy run i starts from node i. Each step adds the unused node with the smallest
+ * (tour length increase + node cost); ties go to the lowest node, then lowest position. */
 #include "../../../common/c/tsp.h"
 
 #define RANDOM_RUNS 200
 
-static void insert_at(int *tour, int m, int pos, int node) {
-    memmove(tour + pos + 1, tour + pos, (size_t)(m - pos) * sizeof(int));
-    tour[pos] = node;
+/* A tour under construction, plus which nodes are already in it. */
+typedef struct {
+    int *nodes; /* caller-provided buffer with room for n nodes */
+    int length;
+    char *used; /* used[v] is 1 if node v is in the tour */
+    int trace;
+} Builder;
+
+static Builder start_tour(const Instance *instance, int start, int trace, int *nodes) {
+    Builder tour = {nodes, 1, calloc(instance->n, 1), trace};
+    tour.nodes[0] = start;
+    tour.used[start] = 1;
+    if (trace) emit_step(tour.nodes, tour.length);
+    return tour;
 }
 
-static int random_solution(const Instance *in, uint64_t seed, int trace, int *tour) {
+static void add_node(Builder *tour, int position, int node) {
+    int nodes_to_shift = tour->length - position;
+    memmove(tour->nodes + position + 1, tour->nodes + position, nodes_to_shift * sizeof(int));
+    tour->nodes[position] = node;
+    tour->length++;
+    tour->used[node] = 1;
+    if (tour->trace) emit_step(tour->nodes, tour->length);
+}
+
+/* Unused node u minimizing D(from_node, u) + cost[u]. */
+static int nearest_unused_node(const Instance *instance, const Builder *tour, int from_node) {
+    int best_node = -1;
+    long long best_value = LLONG_MAX;
+    for (int u = 0; u < instance->n; u++) {
+        if (tour->used[u]) continue;
+        long long value = D(instance, from_node, u) + instance->cost[u];
+        if (value < best_value) {
+            best_node = u;
+            best_value = value;
+        }
+    }
+    return best_node;
+}
+
+/* Returns the cheapest insertion index for `node` and stores the tour length increase in *length_increase. */
+typedef int (*PositionFn)(const Instance *instance, const Builder *tour, int node, long long *length_increase);
+
+/* Index 0 is before the first node, `length` is after the last one. */
+static int cheapest_position_in_path(const Instance *instance, const Builder *tour, int node,
+                                     long long *length_increase) {
+    const int *nodes = tour->nodes;
+    int length = tour->length;
+    int best_position = -1;
+    long long best_increase = LLONG_MAX;
+
+    for (int p = 0; p <= length; p++) {
+        long long increase;
+        if (p == 0) {
+            increase = D(instance, node, nodes[0]);
+        } else if (p == length) {
+            increase = D(instance, nodes[length - 1], node);
+        } else {
+            int before = nodes[p - 1], after = nodes[p];
+            increase = D(instance, before, node) + D(instance, node, after) - D(instance, before, after);
+        }
+        if (increase < best_increase) {
+            best_position = p;
+            best_increase = increase;
+        }
+    }
+
+    *length_increase = best_increase;
+    return best_position;
+}
+
+/* Edge i is nodes[i] -> nodes[i+1] (the last wraps to nodes[0]); inserting there gives index i + 1. */
+static int cheapest_position_in_cycle(const Instance *instance, const Builder *tour, int node,
+                                      long long *length_increase) {
+    int best_position = -1;
+    long long best_increase = LLONG_MAX;
+
+    for (int i = 0; i < tour->length; i++) {
+        int before = tour->nodes[i];
+        int after = tour->nodes[(i + 1) % tour->length];
+        long long increase = D(instance, before, node) + D(instance, node, after) - D(instance, before, after);
+        if (increase < best_increase) {
+            best_position = i + 1;
+            best_increase = increase;
+        }
+    }
+
+    *length_increase = best_increase;
+    return best_position;
+}
+
+/* Unused node and position with the smallest total cost of adding. */
+static void cheapest_insertion(const Instance *instance, const Builder *tour, PositionFn cheapest_position,
+                               int *best_node, int *best_position) {
+    long long best_value = LLONG_MAX;
+    *best_node = -1;
+    *best_position = -1;
+
+    for (int u = 0; u < instance->n; u++) {
+        if (tour->used[u]) continue;
+        long long length_increase;
+        int position = cheapest_position(instance, tour, u, &length_increase);
+        long long value = length_increase + instance->cost[u];
+        if (value < best_value) {
+            *best_node = u;
+            *best_position = position;
+            best_value = value;
+        }
+    }
+}
+
+static int random_solution(const Instance *instance, uint64_t seed, int trace, int *tour) {
     Rng rng = {seed};
-    int *perm = malloc(in->n * sizeof(int));
-    for (int i = 0; i < in->n; i++) perm[i] = i;
-    rng_shuffle(&rng, perm, in->n);
-    memcpy(tour, perm, in->k * sizeof(int));
-    free(perm);
-    if (trace)
-        for (int m = 1; m <= in->k; m++) emit_step(tour, m);
-    return in->k;
+    int *nodes = malloc(instance->n * sizeof(int));
+    for (int i = 0; i < instance->n; i++) nodes[i] = i;
+    rng_shuffle(&rng, nodes, instance->n);
+
+    memcpy(tour, nodes, instance->k * sizeof(int));
+    free(nodes);
+
+    if (trace) {
+        for (int length = 1; length <= instance->k; length++) emit_step(tour, length);
+    }
+    return instance->k;
 }
 
-/* Append the node with the best (distance from last node + node cost). */
-static int nn_end(const Instance *in, int start, int trace, int *tour) {
-    char *used = calloc(in->n, 1);
-    int m = 1;
-    tour[0] = start;
-    used[start] = 1;
-    if (trace) emit_step(tour, m);
-    while (m < in->k) {
-        int last = tour[m - 1], best_u = -1;
-        long long best = LLONG_MAX;
-        for (int u = 0; u < in->n; u++) {
-            if (used[u]) continue;
-            long long delta = D(in, last, u) + in->cost[u];
-            if (delta < best) best = delta, best_u = u;
-        }
-        tour[m++] = best_u;
-        used[best_u] = 1;
-        if (trace) emit_step(tour, m);
+/* Append the nearest unused node to the end of the path. */
+static int nn_end(const Instance *instance, int start, int trace, int *tour) {
+    Builder path = start_tour(instance, start, trace, tour);
+
+    while (path.length < instance->k) {
+        int node = nearest_unused_node(instance, &path, path.nodes[path.length - 1]);
+        add_node(&path, path.length, node);
     }
-    free(used);
-    return m;
+
+    free(path.used);
+    return path.length;
 }
 
-/* Insert the best node at the best position of the path: front, between two nodes, or end. */
-static int nn_any(const Instance *in, int start, int trace, int *tour) {
-    char *used = calloc(in->n, 1);
-    int m = 1;
-    tour[0] = start;
-    used[start] = 1;
-    if (trace) emit_step(tour, m);
-    while (m < in->k) {
-        int best_u = -1, best_pos = -1;
-        long long best = LLONG_MAX;
-        for (int u = 0; u < in->n; u++) {
-            if (used[u]) continue;
-            for (int p = 0; p <= m; p++) { /* p = index u is inserted at */
-                long long delta;
-                if (p == 0) delta = D(in, u, tour[0]);
-                else if (p == m) delta = D(in, tour[m - 1], u);
-                else delta = D(in, tour[p - 1], u) + D(in, u, tour[p]) - D(in, tour[p - 1], tour[p]);
-                delta += in->cost[u];
-                if (delta < best) best = delta, best_u = u, best_pos = p;
-            }
-        }
-        insert_at(tour, m++, best_pos, best_u);
-        used[best_u] = 1;
-        if (trace) emit_step(tour, m);
+/* Insert the best node at the best position of the path. */
+static int nn_any(const Instance *instance, int start, int trace, int *tour) {
+    Builder path = start_tour(instance, start, trace, tour);
+
+    while (path.length < instance->k) {
+        int node, position;
+        cheapest_insertion(instance, &path, cheapest_position_in_path, &node, &position);
+        add_node(&path, position, node);
     }
-    free(used);
-    return m;
+
+    free(path.used);
+    return path.length;
 }
 
-/* Start from the best pair, then repeatedly insert the best node into the best edge of the cycle. */
-static int greedy_cycle(const Instance *in, int start, int trace, int *tour) {
-    char *used = calloc(in->n, 1);
-    int m = 1;
-    tour[0] = start;
-    used[start] = 1;
-    if (trace) emit_step(tour, m);
+/* Start from the best pair, then insert the best node into the best edge of the cycle. */
+static int greedy_cycle(const Instance *instance, int start, int trace, int *tour) {
+    Builder cycle = start_tour(instance, start, trace, tour);
 
-    int best_u = -1;
-    long long best = LLONG_MAX;
-    for (int u = 0; u < in->n; u++) {
-        if (used[u]) continue;
-        long long delta = D(in, start, u) + in->cost[u];
-        if (delta < best) best = delta, best_u = u;
-    }
-    tour[m++] = best_u;
-    used[best_u] = 1;
-    if (trace) emit_step(tour, m);
+    int partner = nearest_unused_node(instance, &cycle, start);
+    add_node(&cycle, cycle.length, partner);
 
-    while (m < in->k) {
-        int best_pos = -1;
-        best_u = -1;
-        best = LLONG_MAX;
-        for (int u = 0; u < in->n; u++) {
-            if (used[u]) continue;
-            for (int i = 0; i < m; i++) { /* edge tour[i] -> tour[i+1], incl. the closing edge */
-                int a = tour[i], b = tour[(i + 1) % m];
-                long long delta = D(in, a, u) + D(in, u, b) - D(in, a, b) + in->cost[u];
-                if (delta < best) best = delta, best_u = u, best_pos = i + 1;
-            }
-        }
-        insert_at(tour, m++, best_pos, best_u);
-        used[best_u] = 1;
-        if (trace) emit_step(tour, m);
+    while (cycle.length < instance->k) {
+        int node, position;
+        cheapest_insertion(instance, &cycle, cheapest_position_in_cycle, &node, &position);
+        add_node(&cycle, position, node);
     }
-    free(used);
-    return m;
+
+    free(cycle.used);
+    return cycle.length;
 }
 
-static int solve(const Instance *in, const char *method, int run, uint64_t seed, int trace, int *tour) {
-    if (!strcmp(method, "random")) return random_solution(in, seed, trace, tour);
-    if (!strcmp(method, "nn_end")) return nn_end(in, run, trace, tour);
-    if (!strcmp(method, "nn_any")) return nn_any(in, run, trace, tour);
-    return greedy_cycle(in, run, trace, tour);
+static int solve(const Instance *instance, const char *method, int run, uint64_t seed, int trace, int *tour) {
+    if (!strcmp(method, "random")) return random_solution(instance, seed, trace, tour);
+    if (!strcmp(method, "nn_end")) return nn_end(instance, run, trace, tour);
+    if (!strcmp(method, "nn_any")) return nn_any(instance, run, trace, tour);
+    return greedy_cycle(instance, run, trace, tour);
 }
 
 static int runs_for(const char *method, int n) {
