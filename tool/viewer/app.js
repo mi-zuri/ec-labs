@@ -28,6 +28,7 @@ const S = {
   session: null,    // {method, lang, mode, meta, runs, done, best}
   controller: null,
   batch: null,
+  included: [],     // ids of the extra labs compared with the selected one
 };
 
 // ------------------------------------------------------------------ helpers
@@ -154,6 +155,7 @@ async function init() {
 }
 
 function selectLab(id, methodId) {
+  if (S.lab && S.lab.id !== id) S.included = []; // changing the lab starts again with that lab only
   S.lab = S.catalog.labs.find((l) => l.id === id);
   $("lab").value = $("cmp-lab").value = id;
   store("lab", id);
@@ -161,6 +163,30 @@ function selectLab(id, methodId) {
   selectMethod(S.lab.methods.some((m) => m.id === methodId) ? methodId : S.lab.methods[0].id);
   renderLangButtons();
   if (!$("tab-compare").hidden) loadCompare();
+}
+
+// Labs shown in the Compare tab and the report: the selected lab (always) plus the extra labs ticked by the user.
+function includedLabs() {
+  return S.catalog.labs.filter((l) => l.id === S.lab.id || S.included.includes(l.id));
+}
+
+// Every solution to compare: {lab, method, name}. With several labs the name says where it comes from.
+function compareEntries() {
+  const labs = includedLabs();
+  return labs.flatMap((lab) => lab.methods.map((method) => ({
+    lab, method, name: labs.length > 1 ? `Lab ${lab.num}: ${method.name}` : method.name,
+  })));
+}
+
+function renderIncludeChecks() {
+  const on = includedLabs().map((l) => l.id);
+  $("cmp-include").innerHTML = S.catalog.labs.map((l) =>
+    `<label title="${esc(l.title)}"><input type="checkbox" value="${l.id}"${on.includes(l.id) ? " checked" : ""}${l.id === S.lab.id ? " disabled" : ""}> Lab ${l.num} · ${esc(l.title)}</label>`).join("");
+}
+
+function onIncludeChange() {
+  S.included = [...$("cmp-include").querySelectorAll("input:checked:not(:disabled)")].map((c) => c.value);
+  loadCompare();
 }
 
 function selectMethod(id) {
@@ -570,46 +596,44 @@ function drawRunsChart() {
 
 async function loadCompare() {
   loadReport();
-  const results = await getJSON(`/api/results?lab=${S.lab.id}&instance=${encodeURIComponent(S.instance)}`);
-  const by = {};
-  for (const r of results) (by[r.method] = by[r.method] || {})[r.lang] = r;
+  renderIncludeChecks();
+  const entries = compareEntries();
+  const results = await getJSON(`/api/results?lab=${includedLabs().map((l) => l.id).join(",")}&instance=${encodeURIComponent(S.instance)}`);
+  const by = {}; // by[lab id + "/" + method id][lang]
+  for (const r of results) (by[r.lab + "/" + r.method] = by[r.lab + "/" + r.method] || {})[r.lang] = r;
   S.compare = by;
-  const langs = LANG_ORDER.filter((l) => S.lab.langs.includes(l));
+  const langs = LANG_ORDER.filter((l) => entries.some((e) => e.lab.langs.includes(l)));
 
-  // objective + time table
-  let html = `<tr><th>Method</th>${langs.map((l) => `<th><span class="lang-dot" style="background:${langColor(l)}"></span>${esc(langName(l))}</th>`).join("")}<th>Same results?</th></tr>`;
-  const scoreOf = (id) => {
-    const v = Object.values(by[id] || {}).map((r) => r.stats.obj_avg);
+  // objective table: languages usually agree, so each score is shown once
+  let html = `<tr><th>Method</th><th>Average (min – max)</th><th>Same results?</th></tr>`;
+  const scoreOf = (key) => {
+    const v = Object.values(by[key] || {}).map((r) => r.stats.obj_avg);
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
-  const maxScore = Math.max(0, ...S.lab.methods.map((m) => scoreOf(m.id) || 0)); // one scale for the whole lab
-  for (const m of S.lab.methods) {
-    const row = by[m.id] || {};
-    const sc = scoreOf(m.id);
+  const scores = entries.map((e) => scoreOf(e.lab.id + "/" + e.method.id)).filter((v) => v != null);
+  const maxScore = Math.max(0, ...scores); // one scale for all compared solutions
+  // Random is far worse than everything else, so it stays gray and out of the colour range.
+  const graded = entries.filter((e) => e.method.id !== "random")
+    .map((e) => scoreOf(e.lab.id + "/" + e.method.id)).filter((v) => v != null);
+  const bestGraded = Math.min(...graded), worstGraded = Math.max(...graded);
+  for (const { lab, method: m, name } of entries) {
+    const row = by[lab.id + "/" + m.id] || {};
+    const sc = scoreOf(lab.id + "/" + m.id);
     const scoreBar = sc == null ? "" : `<div class="bar-row score-row">
-        <div class="bar" style="width:${(100 * sc / maxScore).toFixed(2)}%;background:var(--accent, #3b5bdb)"></div></div>`;
-    html += `<tr><td><b>${esc(m.name)}</b>${scoreBar}</td>`;
-    for (const l of langs) {
-      const r = row[l];
-      if (!r) { html += `<td class="empty">not run yet</td>`; continue; }
-      const st = r.stats;
-      html += `<td><div class="num">${fmtInt(st.obj_avg)}</div>
-        <div class="sub">${fmtInt(st.obj_min)} – ${fmtInt(st.obj_max)}</div>
-        <div class="sub">${fmtTime(st.ns_avg)} / run ${r.checked ? '<span class="ok">✓</span>' : '<span class="bad">✗ checker</span>'}</div></td>`;
-    }
-    html += `<td>${matchCell(row)}</td></tr>`;
+        <div class="bar" style="width:${(100 * sc / maxScore).toFixed(2)}%;background:${m.id === "random" ? "var(--muted)" : scoreColor(sc, bestGraded, worstGraded)}"></div></div>`;
+    html += `<tr><td><b>${esc(name)}</b>${scoreBar}</td><td>${scoreCell(row)}</td><td>${matchCell(row)}</td></tr>`;
   }
   $("cmp-table").innerHTML = html;
 
   // time bars
   let bars = "";
   const allNs = results.filter((r) => langs.includes(r.lang)).map((r) => r.stats.ns_avg);
-  const maxNs = Math.max(...allNs); // one scale for the whole lab
-  for (const m of S.lab.methods) {
-    const row = by[m.id] || {};
+  const maxNs = Math.max(...allNs); // one scale for all compared solutions
+  for (const { lab, method: m, name } of entries) {
+    const row = by[lab.id + "/" + m.id] || {};
     const have = langs.filter((l) => row[l]);
     if (!have.length) continue;
-    bars += `<div class="mname">${esc(m.name)}</div>`;
+    bars += `<div class="mname">${esc(name)}</div>`;
     for (const l of have) {
       const ns = row[l].stats.ns_avg;
       bars += `<div class="lname">${esc(langName(l))}</div><div class="bar-row">
@@ -622,34 +646,51 @@ async function loadCompare() {
   // best solutions
   const grid = $("best-grid");
   grid.innerHTML = "";
-  for (const m of S.lab.methods) {
-    const all = Object.values(by[m.id] || {});
+  for (const { lab, method: m, name } of entries) {
+    const all = Object.values(by[lab.id + "/" + m.id] || {});
     if (!all.length) continue;
     const best = all.reduce((a, b) => (b.best.obj < a.best.obj ? b : a));
     const fastest = all.reduce((a, b) => (b.stats.ns_avg < a.stats.ns_avg ? b : a));
     const card = document.createElement("div");
     card.className = "panel best-card";
-    card.innerHTML = `<div class="card-head">${esc(m.name)}</div><canvas></canvas>
+    card.innerHTML = `<div class="card-head">${esc(name)}</div><canvas></canvas>
       <div class="meta"><b>${fmtInt(best.best.obj)}</b> <span class="hint">= ${fmtInt(best.best.len)} + ${fmtInt(best.best.cost)} · run #${best.best.run} · ${esc(langName(fastest.lang))}</span></div>`;
-    card.addEventListener("click", () => openBest(m, best));
+    card.addEventListener("click", () => openBest(lab, m, best));
     grid.appendChild(card);
     requestAnimationFrame(() => drawPlot(card.querySelector("canvas"), best.best.tour, { small: true }));
   }
 }
 
-function matchCell(row) {
-  const langs = LANG_ORDER.filter((l) => row[l]);
-  if (langs.length < 2) return `<span class="hint">needs 2+ languages</span>`;
-  const base = row[langs[0]].objs;
-  const diffs = langs.slice(1).filter((l) => row[l].objs.length !== base.length || row[l].objs.some((v, i) => v !== base[i]));
-  if (!diffs.length) return `<span class="ok">✓ identical in ${langs.length}</span>`;
-  return `<span class="bad">✗ ${diffs.map(langName).join(", ")} differ from ${langName(langs[0])}</span>`;
+// Lower objective is better: the best compared method is green, the worst red.
+function scoreColor(score, best, worst) {
+  const t = worst > best ? (score - best) / (worst - best) : 0;
+  return `hsl(${Math.round(120 * (1 - t))}, 65%, 48%)`;
 }
 
-function openBest(method, result) {
+// Scores of the first language that ran; matchCell reports any language that differs.
+function scoreCell(row) {
+  const first = LANG_ORDER.find((l) => row[l]);
+  if (!first) return `<span class="hint">not run yet</span>`;
+  const st = row[first].stats;
+  return `<div class="num">${fmtInt(st.obj_avg)}</div>
+    <div class="sub">${fmtInt(st.obj_min)} – ${fmtInt(st.obj_max)}</div>`;
+}
+
+function matchCell(row) {
+  const langs = LANG_ORDER.filter((l) => row[l]);
+  const failed = langs.filter((l) => !row[l].checked);
+  const checker = failed.length ? `<div class="bad">✗ checker failed: ${failed.map(langName).join(", ")}</div>` : "";
+  if (langs.length < 2) return `<span class="hint">needs 2+ languages</span>${checker}`;
+  const base = row[langs[0]].objs;
+  const diffs = langs.slice(1).filter((l) => row[l].objs.length !== base.length || row[l].objs.some((v, i) => v !== base[i]));
+  if (!diffs.length) return `<span class="ok" title="identical in ${langs.length} languages">✓</span>${checker}`;
+  return `<span class="bad">✗ ${diffs.map(langName).join(", ")} differ from ${langName(langs[0])}</span>${checker}`;
+}
+
+function openBest(lab, method, result) {
   if (busy()) return;
   switchTab("run");
-  selectMethod(method.id);
+  selectLab(lab.id, method.id);
   // Runs are deterministic (start = run index, fixed seed), so replay the best run in trace mode.
   S.lang = result.lang;
   renderLangButtons();
@@ -660,12 +701,11 @@ function openBest(method, result) {
 
 async function runBatch(onlyMissing) {
   if (busy()) return;
-  const langs = availableLangs();
   await loadCompare();
   const jobs = [];
-  for (const m of S.lab.methods)
-    for (const l of langs)
-      if (!onlyMissing || !(S.compare[m.id] && S.compare[m.id][l])) jobs.push({ m, l });
+  for (const { lab, method: m, name } of compareEntries())
+    for (const l of LANG_ORDER.filter((l) => lab.langs.includes(l) && S.catalog.langs[l] && S.catalog.langs[l].available))
+      if (!onlyMissing || !(S.compare[lab.id + "/" + m.id] && S.compare[lab.id + "/" + m.id][l])) jobs.push({ lab, m, l, name });
   if (!jobs.length) { $("batch-progress").textContent = "Everything is already benchmarked. Use “Re-run all” to refresh."; return; }
 
   S.batch = { controller: new AbortController() };
@@ -674,11 +714,11 @@ async function runBatch(onlyMissing) {
   const failed = [];
   try {
     for (let j = 0; j < jobs.length; j++) {
-      const { m, l } = jobs[j];
-      const label = `${j + 1} / ${jobs.length} · ${m.name} · ${langName(l)}`;
+      const { lab, m, l, name } = jobs[j];
+      const label = `${j + 1} / ${jobs.length} · ${name} · ${langName(l)}`;
       $("batch-progress").textContent = label + " · starting…";
       let done = 0, total = 0, error = null;
-      await stream({ lab: S.lab.id, lang: l, method: m.id, instance: S.instance, mode: "bench" }, (msg) => {
+      await stream({ lab: lab.id, lang: l, method: m.id, instance: S.instance, mode: "bench" }, (msg) => {
         if (msg.t === "compile" && msg.status === "building") $("batch-progress").textContent = label + " · compiling…";
         if (msg.t === "compile" && msg.status === "error") error = "compile error";
         if (msg.t === "queued") $("batch-progress").textContent = label + " · waiting for another benchmark…";
@@ -686,7 +726,7 @@ async function runBatch(onlyMissing) {
         if (msg.t === "error") error = msg.msg;
         if (msg.t === "run_end") { done++; $("batch-progress").textContent = `${label} · run ${done} / ${total}`; }
       }, S.batch.controller.signal);
-      if (error) failed.push(`${m.name} · ${langName(l)}: ${error.split("\n")[0]}`);
+      if (error) failed.push(`${name} · ${langName(l)}: ${error.split("\n")[0]}`);
       await loadCompare();
     }
     $("batch-progress").textContent = failed.length ? "Finished with errors: " + failed.join("; ") : `Finished ${jobs.length} benchmark${jobs.length > 1 ? "s" : ""}.`;
@@ -717,7 +757,7 @@ async function makeReport() {
   btn.disabled = true;
   msg.textContent = "Generating…";
   try {
-    const res = await fetch("/api/report?lab=" + S.lab.id, { method: "POST" });
+    const res = await fetch(`/api/report?lab=${S.lab.id}&include=${includedLabs().map((l) => l.id).join(",")}`, { method: "POST" });
     const r = await res.json();
     if (r.error) throw new Error(r.error);
     msg.textContent = (r.created ? "Report created. " : "Report regenerated. ") + (r.warnings.length ? "Warnings: " + r.warnings.join("; ") : "");
@@ -762,6 +802,7 @@ function bindEvents() {
   for (const b of document.querySelectorAll(".tab-btn")) b.addEventListener("click", () => switchTab(b.dataset.tab));
   $("lab").addEventListener("change", (e) => selectLab(e.target.value));
   $("cmp-lab").addEventListener("change", (e) => selectLab(e.target.value));
+  $("cmp-include").addEventListener("change", onIncludeChange);
   $("instance").addEventListener("change", (e) => selectInstance(e.target.value));
   $("cmp-instance").addEventListener("change", (e) => selectInstance(e.target.value));
   $("method").addEventListener("change", (e) => selectMethod(e.target.value));

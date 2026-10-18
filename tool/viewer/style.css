@@ -160,6 +160,7 @@ h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
 #cmp-table td .num { font-weight: 600; font-size: 15px; }
 #cmp-table td .sub { color: var(--muted); font-size: 12px; }
 #cmp-table td.empty { color: var(--muted); }
+#cmp-table th:nth-child(2), #cmp-table th:nth-child(3) { width: 160px; }
 .lang-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
 
 .bars { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 4px 12px; margin-bottom: 14px; align-items: center; }
@@ -172,6 +173,11 @@ h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
 .best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 .best-card { cursor: pointer; }
 .best-card:hover { border-color: var(--muted); }
+/* Title gets a fixed two-line block so plots and scores line up across cards */
+.best-card .card-head {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  line-height: 1.35; height: calc(2 * 1.35em);
+}
 .best-card canvas { width: 100%; height: 180px; display: block; }
 .best-card .meta { font-size: 13px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .best-card .meta b { font-size: 15px; }
@@ -201,3 +207,6 @@ button.chip-link { font: inherit; font-size: 13px; cursor: pointer; }
 
 #tour-card, .playback { padding: 8px 12px; }
 #tour-card .card-head { margin-bottom: 4px; }
+
+.checks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.checks label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
