@@ -2,15 +2,19 @@
 
 labs/labN/report/Report.md is the source of truth and is meant to be edited by hand.
 Text outside the `<!-- auto:NAME -->` ... `<!-- /auto:NAME -->` blocks is never touched.
-The blocks (results, plots, solutions, source) are rebuilt from out/results on every run,
+The blocks (results, solutions, source) are rebuilt from out/results on every run,
 and re-added at the end of the file if they were deleted, so the report always has every part.
 
 Everything lives in labs/labN/report/ (Report.md, ReportLabN_<author>.pdf, report_files/*.svg).
 First generation starts from tool/report_template.md; algorithms and conclusions are written by hand in Report.md.
+Hand-made figures (e.g. flowcharts) go to labs/labN/report/figures/ (report_files/ is regenerated).
+Two columns side by side: `<!-- columns -->` left part `<!-- column -->` right part `<!-- /columns -->`.
+`<!-- pagebreak -->` starts a new page at the next heading.
 """
 import glob
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -32,7 +36,6 @@ PDF_AUTHOR = "MichałŻurawski"  # used in the PDF file name
 BLOCK_TITLES = {
     "results": "Results",
     "times": "Running time",
-    "plots": "Visualisation of the best solutions",
     "solutions": "Best solutions (0-based node indices)",
     "source": "Source code",
 }
@@ -93,8 +96,41 @@ def github_base():
 
 # ---------------------------------------------------------------- plots
 
+# Same colours as the viewer dashboard (COST_STOPS and --tour in tool/viewer).
+COST_STOPS = [(42, 157, 143), (233, 196, 106), (228, 87, 46)]  # cheap -> expensive
+TOUR_COLOR = "#3157d5"
+START_COLOR = "#e11d2e"  # the start node is marked with a red X, the first edges start red
+FADE_FRACTION = 0.15  # the first 15% of the tour length fades from red to the tour colour
+
+
+def rgb(hex_color):
+    v = int(hex_color.lstrip("#"), 16)
+    return v >> 16, (v >> 8) & 255, v & 255
+
+
+def cost_color(t):
+    """Teal -> yellow -> red gradient for a cost position t in [0, 1]."""
+    seg, f = (0, t * 2) if t < 0.5 else (1, (t - 0.5) * 2)
+    a, b = COST_STOPS[seg], COST_STOPS[seg + 1]
+    return "rgb(%d,%d,%d)" % tuple(round(a[i] + (b[i] - a[i]) * f) for i in range(3))
+
+
+def fade_edges(nodes, tour):
+    """(a, b, f_a, f_b) for the edges at the start of the tour, a -> b.
+    f is the fade position: 0 = red at the start node, 1 = tour colour after FADE_FRACTION of the tour length (may exceed 1 for f_b)."""
+    dist = lambda a, b: math.hypot(nodes[a][0] - nodes[b][0], nodes[a][1] - nodes[b][1])
+    fade_length = FADE_FRACTION * sum(dist(tour[i - 1], tour[i]) for i in range(len(tour)))
+    walked = 0  # distance from the start to the beginning of the current edge
+    for a, b in zip(tour, tour[1:]):
+        if walked >= fade_length:
+            return
+        yield a, b, walked / fade_length, (walked + dist(a, b)) / fade_length
+        walked += dist(a, b)
+
+
 def svg_plot(nodes, tour):
-    """Best tour: node size and shade show the cost (dark/large = expensive); unselected nodes are small grey dots."""
+    """Best tour as on the dashboard: node colour and size show the cost (teal/small = cheap, red/large = expensive);
+    unselected nodes are faded."""
     size, pad = 600, 14
     xs, ys = [n[0] for n in nodes], [n[1] for n in nodes]
     x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
@@ -104,16 +140,80 @@ def svg_plot(nodes, tour):
     used = set(tour)
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}" width="{size}" height="{size}">',
            f'<rect width="{size}" height="{size}" fill="#fff"/>']
-    for i, n in enumerate(nodes):
-        if i not in used:
-            out.append(f'<circle cx="{sx(n[0]):.1f}" cy="{sy(n[1]):.1f}" r="3" fill="#ccc"/>')
     pts = " ".join(f"{sx(nodes[v][0]):.1f},{sy(nodes[v][1]):.1f}" for v in tour + tour[:1])
-    out.append(f'<polyline points="{pts}" fill="none" stroke="#4a6fa5" stroke-width="2"/>')
-    for v in tour:
-        t = (nodes[v][2] - cmin) / ((cmax - cmin) or 1)
-        g = int(235 - 215 * t)
-        out.append(f'<circle cx="{sx(nodes[v][0]):.1f}" cy="{sy(nodes[v][1]):.1f}" r="{4 + 5 * t:.1f}" '
-                   f'fill="rgb({g},{g},{g})" stroke="#222" stroke-width=".8"/>')
+    out.append(f'<polyline points="{pts}" fill="none" stroke="{TOUR_COLOR}" stroke-width="2" stroke-linejoin="round"/>')
+    start, end = rgb(START_COLOR), rgb(TOUR_COLOR)
+    fade_color = lambda f: "rgb(%d,%d,%d)" % tuple(round(start[c] + (end[c] - start[c]) * min(f, 1)) for c in range(3))
+    defs, lines = [], []
+    for k, (a, b, f_a, f_b) in enumerate(fade_edges(nodes, tour)):  # the start of the tour fades from red to the tour colour: shows where it starts and its direction
+        (ax, ay), (bx, by) = (sx(nodes[a][0]), sy(nodes[a][1])), (sx(nodes[b][0]), sy(nodes[b][1]))
+        blue_at = min(1, (1 - f_a) / (f_b - f_a))  # where along the edge the fade is complete
+        defs.append(f'<linearGradient id="fade{k}" gradientUnits="userSpaceOnUse" x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}">'
+                    f'<stop offset="0" stop-color="{fade_color(f_a)}"/><stop offset="{blue_at:.3f}" stop-color="{fade_color(f_b)}"/></linearGradient>')
+        lines.append(f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" stroke="url(#fade{k})" stroke-width="3" stroke-linecap="round"/>')
+    out.append("<defs>" + "".join(defs) + "</defs>" + "".join(lines))
+    for i, n in enumerate(nodes):
+        t = (n[2] - cmin) / ((cmax - cmin) or 1)
+        style = f'stroke="#1c2230" stroke-opacity=".6" stroke-width=".8"' if i in used else 'opacity=".28"'
+        out.append(f'<circle cx="{sx(n[0]):.1f}" cy="{sy(n[1]):.1f}" r="{3 + 5 * t:.1f}" fill="{cost_color(t)}" {style}/>')
+    x, y, d = sx(nodes[tour[0]][0]), sy(nodes[tour[0]][1]), 8
+    cross = f"M{x - d:.1f},{y - d:.1f}L{x + d:.1f},{y + d:.1f}M{x - d:.1f},{y + d:.1f}L{x + d:.1f},{y - d:.1f}"
+    for color, width in (("#fff", 5.5), (START_COLOR, 3)):  # white outline keeps the X visible on any node
+        out.append(f'<path d="{cross}" stroke="{color}" stroke-width="{width}" stroke-linecap="round" fill="none"/>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def nice_axis(top, ticks=8):
+    """(step, max) with a whole-number step (1, 2 or 5 times a power of ten) so that `ticks` steps cover [0, top]."""
+    raw = top / ticks
+    power = 10 ** math.floor(math.log10(raw))
+    step = next(m * power for m in (1, 2, 5, 10) if m * power >= raw)
+    return step, step * math.ceil(top / step)
+
+
+def svg_pareto(points, lang_name):
+    """Average objective against average run time (both minimised, linear axes from 0, objective axis flipped so the best is at the top).
+    points: [(label, ns, objective)]. The Pareto front (no other method is both faster and better) is joined by a step line."""
+    w, h, left, right, top, bottom = 1200, 560, 90, 480, 30, 70
+    t_unit, t_name = next((u, n) for u, n in ((1e9, "s"), (1e6, "ms"), (1e3, "µs"), (1, "ns")) if max(t for _, t, _ in points) >= u or u == 1)
+    t_step, t_max = nice_axis(max(t for _, t, _ in points) / t_unit)
+    o_step, o_max = nice_axis(max(o for _, _, o in points))
+    t_max *= t_unit
+    sx = lambda t: left + t / t_max * (w - left - right)
+    sy = lambda o: top + o / o_max * (h - top - bottom)  # flipped: the best (lowest) objective is at the top
+    dominated = lambda a: any(b[1] <= a[1] and b[2] <= a[2] and (b[1], b[2]) != (a[1], a[2]) for b in points)
+    front = sorted((p for p in points if not dominated(p)), key=lambda p: p[1])
+    plot_w, plot_h = w - left - right, h - top - bottom
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}" font-family="Helvetica, Arial, sans-serif" font-size="15">',
+           f'<rect width="{w}" height="{h}" fill="#fff"/>',
+           f'<rect x="{left}" y="{top}" width="{plot_w}" height="{plot_h}" fill="#f8f9fc"/>']
+    for k in range(round(t_max / t_unit / t_step) + 1):
+        x = sx(k * t_step * t_unit)
+        out.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{h - bottom}" stroke="#e1e5ee"/>'
+                   f'<text x="{x:.1f}" y="{h - bottom + 24}" text-anchor="middle" fill="#4a5163">{k * t_step:g}</text>')
+    for k in range(round(o_max / o_step) + 1):
+        y = sy(k * o_step)
+        out.append(f'<line x1="{left}" y1="{y:.1f}" x2="{w - right}" y2="{y:.1f}" stroke="#e1e5ee"/>'
+                   f'<text x="{left - 10}" y="{y + 5:.1f}" text-anchor="end" fill="#4a5163">{k * o_step:g}</text>')
+    out.append(f'<rect x="{left}" y="{top}" width="{plot_w}" height="{plot_h}" fill="none" stroke="#9aa1b3"/>')
+    out.append(f'<text x="{left + plot_w / 2}" y="{h - 14}" text-anchor="middle" font-size="17" fill="#1c2230">average running time ({lang_name.lower()}), {t_name}</text>')
+    out.append(f'<text transform="translate(22,{top + plot_h / 2}) rotate(-90)" text-anchor="middle" font-size="17" fill="#1c2230">score</text>')
+    steps = f"M{sx(front[0][1]):.1f},{sy(front[0][2]):.1f}"
+    for _, t, o in front[1:]:
+        steps += f"H{sx(t):.1f}V{sy(o):.1f}"
+    steps += f"H{w - right}"  # the best objective found so far holds for any longer running time
+    out.append(f'<path d="{steps}" fill="none" stroke="{TOUR_COLOR}" stroke-width="2" stroke-dasharray="6 4" opacity=".7"/>')
+    for k, (label, t, o) in enumerate(points, 1):  # numbered points (names would overlap), the legend on the right gives the names
+        on_front = (label, t, o) in front
+        color = TOUR_COLOR if on_front else "#8b92a5"
+        ly = top + 20 + (k - 1) * 32
+        weight = ' font-weight="bold"' if on_front else ""
+        out.append(f'<circle cx="{sx(t):.1f}" cy="{sy(o):.1f}" r="12" fill="{color}" stroke="#fff" stroke-width="2"/>'
+                   f'<text x="{sx(t):.1f}" y="{sy(o) + 5:.1f}" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">{k}</text>'
+                   f'<circle cx="{w - right + 36}" cy="{ly - 5}" r="12" fill="{color}"/>'
+                   f'<text x="{w - right + 36}" y="{ly}" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">{k}</text>'
+                   f'<text x="{w - right + 58}" y="{ly}" fill="#1c2230"{weight}>{html.escape(label)}</text>')
     out.append("</svg>")
     return "".join(out)
 
@@ -144,13 +244,16 @@ def entries_of(labs):
     return [(l, m, m["name"]) for l in labs for m in l["methods"]]
 
 
-def time_section(inst, entries, by_lab):
-    """Markdown for one instance: table of the average time per run, methods by language."""
+def time_section(inst, entries, by_lab, files_dir):
+    """Markdown for one instance: table of the average time per run, methods by language, and the time/quality Pareto plot."""
     rows = []  # (method name, {lang: avg ns})
+    pareto = []  # (method name, avg ns, avg objective), one language for all methods
     for lab, m, mname in entries:
         by = {lang: r["stats"]["ns_avg"] for lang, r in by_lab[lab["id"]].get(m["id"], {}).items()}
         if by:
             rows.append((mname, by))
+            r = pick(by_lab[lab["id"]][m["id"]])
+            pareto.append((mname, r["stats"]["ns_avg"], r["stats"]["obj_avg"], r["lang"]))
     if not rows:
         return f"### Instance {inst}\n\nno benchmark results\n"
     langs = [l for l in LANG_ORDER if any(l in by for _, by in rows)]
@@ -159,17 +262,22 @@ def time_section(inst, entries, by_lab):
         fastest = min(by.values())
         table.append(f"| {mname} | " + " | ".join(
             "" if l not in by else f"**{fmt_time(by[l])}**" if by[l] == fastest else fmt_time(by[l]) for l in langs) + " |")
-    return f"### Instance {inst}\n\n" + "\n".join(table) + "\n"
+    name = f"{inst}_pareto.svg"
+    with open(os.path.join(files_dir, name), "w") as f:
+        f.write(svg_pareto([(n, t, o) for n, t, o, _ in pareto], LANG_NAMES[pareto[0][3]]))
+    caption = f"Pareto plot, instance {inst}"
+    return f"### Instance {inst}\n\n" + "\n".join(table) + f"\n\n### Pareto plot (Instance {inst})\n\n![{caption}]({FILES_DIR}/{name})\n"
 
 
-def build_blocks(labs, instances, out_dir):
+def build_blocks(labs, instances, out_dir, own):
     """Return ({block name: markdown}, [warnings]). Also writes the plot SVGs.
 
     `labs` are the labs whose solutions are compared (the report's own lab is normally one of them).
+    `own` is the report's lab: the best solutions and source code sections cover only that lab.
     """
     warnings = []
     entries = entries_of(labs)
-    res, times, plots, sols = [], [], [], []
+    res, times, sols = [], [], []
     files_dir = os.path.join(out_dir, FILES_DIR)
     os.makedirs(files_dir, exist_ok=True)
     for old in glob.glob(os.path.join(files_dir, "*.svg")):
@@ -179,17 +287,17 @@ def build_blocks(labs, instances, out_dir):
     for inst in instances:
         by_lab = {l["id"]: load_results(l["id"], inst) for l in labs}
         nodes = load_nodes(inst)
-        res.append(f"### Instance {inst}\n\n| Method | Min | Max | Avg | Best solution checked |\n|---|--:|--:|--:|:-:|")
-        plots.append(f"### Instance {inst}\n")
-        times.append(time_section(inst, entries, by_lab))
+        res.append(f"### Instance {inst}\n\n| Method | Min | Max | Avg |\n|---|--:|--:|--:|")
+        plots = []  # the visualisations of this instance, shown under its results table
+        times.append(time_section(inst, entries, by_lab, files_dir))
         sols.append(f"### Instance {inst}\n")
-        rows = []  # (method name, [min, max, avg], checked) or (method name, None, None) when not run
+        rows = []  # (method name, [min, max, avg]) or (method name, None) when not run
         for lab, m, mname in entries:
             by = by_lab[lab["id"]]
             r = pick(by.get(m["id"], {}))
             if r is None:
                 warnings.append(f"no benchmark results for {inst} / {mname}")
-                rows.append((mname, None, None))
+                rows.append((mname, None))
                 continue
             langs = by[m["id"]]
             if len(langs) > 1:
@@ -198,22 +306,25 @@ def build_blocks(labs, instances, out_dir):
                                 for x in langs.values())
             all_checked &= bool(r["checked"])
             s, b = r["stats"], r["best"]
-            rows.append((mname, [s["obj_min"], s["obj_max"], round(s["obj_avg"])], r["checked"]))
+            rows.append((mname, [s["obj_min"], s["obj_max"], round(s["obj_avg"])]))
             name = f"{inst}_{lab['id']}_{m['id']}.svg"
             with open(os.path.join(files_dir, name), "w") as f:
                 f.write(svg_plot(nodes, b["tour"]))
             plots.append(f"![{mname}<br>**{b['obj']}** (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
-            sols.append(f"**{mname}**\n{', '.join(map(str, b['tour']))}\n")
+            if lab["id"] == own["id"]:
+                sols.append(f"**{mname}**\n{', '.join(map(str, b['tour']))}\n")
         # objective is minimised, so the lowest value in each column is the best (ties are all bold)
-        best = [min((v[k] for _, v, _ in rows if v), default=None) for k in range(3)]
-        for mname, vals, checked in rows:
+        best = [min((v[k] for _, v in rows if v), default=None) for k in range(3)]
+        for mname, vals in rows:
             if vals is None:
-                res.append(f"| {mname} | not run | | | |")
+                res.append(f"| {mname} | not run | | |")
                 continue
             cells = [f"**{v}**" if v == best[k] else str(v) for k, v in enumerate(vals)]
-            res.append(f"| {mname} | {' | '.join(cells)} | {'yes' if checked else '**NO**'} |")
+            res.append(f"| {mname} | {' | '.join(cells)} |")
         res.append("")
-        plots.append("")
+        res.append(f"### Visualisation (Instance {inst})\n")
+        res.extend(plots)
+        res.append("")
 
     n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for l in labs for by in [load_results(l["id"], i)]
                                for langs in by.values() for r in langs.values()}))
@@ -223,23 +334,18 @@ def build_blocks(labs, instances, out_dir):
         summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
     times_intro = ("Average time of one run of the algorithm only, over the same runs as above. "
                    "The fastest language in each row is in bold.")
-    plots_intro = "Node colour and size show the node cost (dark and large = expensive). Grey dots are nodes not selected."
 
     base, branch = github_base()
-    source_lines = []
-    for lab in labs:
-        rel = f"labs/{lab['id']}"
-        if base:
-            links = [f"[{LANG_NAMES[l]}]({base}/blob/{branch}/{rel}/{LANG_SRC[l]})" for l in LANG_ORDER if l in lab["langs"]]
-            source_lines.append(f"- Lab {lab['num']}: [{rel}]({base}/tree/{branch}/{rel}) ({', '.join(links)})")
-        else:
-            source_lines.append(f"- Lab {lab['num']}: `{rel}/` (no GitHub remote found, so no link)")
-    source = "Source code of the compared labs:\n\n" + "\n".join(source_lines)
+    rel = f"labs/{own['id']}"
+    if base:
+        links = [f"[{LANG_NAMES[l]}]({base}/blob/{branch}/{rel}/{LANG_SRC[l]})" for l in LANG_ORDER if l in own["langs"]]
+        source = f"[{rel}]({base}/tree/{branch}/{rel}) ({', '.join(links)})"
+    else:
+        source = f"`{rel}/` (no GitHub remote found, so no link)"
 
     return {
         "results": summary + "\n\n" + "\n".join(res),
         "times": times_intro + "\n\n" + "\n".join(times),
-        "plots": plots_intro + "\n\n" + "\n".join(plots),
         "solutions": "\n".join(sols),
         "source": source,
     }, warnings
@@ -258,7 +364,8 @@ def write_markdown(lab, instances, labs):
     md_path = os.path.join(out_dir, MD_NAME)
     created = not os.path.exists(md_path)
     text = first_text(lab) if created else read_text(md_path)
-    blocks, warnings = build_blocks(labs, instances, out_dir)
+    text = re.sub(r"## Visualisation of the best solutions\s*<!-- auto:plots.*?<!-- /auto:plots -->\s*", "", text, flags=re.S)  # old separate section: the plots now live under Results
+    blocks, warnings = build_blocks(labs, instances, out_dir, lab)
 
     seen = set()
 
@@ -299,14 +406,14 @@ def markdown_to_html(md, base_dir, title):
     lines = md.splitlines()
     out, i = [], 0
     para = []
-    sec = {"at": None, "n": 0, "first": True}  # index in `out` where the current ### block started; ### blocks seen in this ## section
+    sec = {"at": None, "n": 0, "first": True, "h2": "", "h3": ""}  # index in `out` where the current ### block started; ### blocks seen in this ## section
 
     def close_block():
         """Wrap a ### block in a div; blocks with a table are kept on one page (figure grids may continue on the next page, row by row)."""
         if sec["at"] is not None:
             chunk = out[sec["at"]:]
             keep = any(c.startswith("<table") for c in chunk)
-            new_page = not sec["first"] and "".join(chunk).count("<figure>") > 4  # many plots: each instance but the first starts a page
+            new_page = not sec["first"] and sec["h2"] in (BLOCK_TITLES["results"], BLOCK_TITLES["times"]) and sec["h3"].startswith("Instance")  # every instance but the first starts a page
             out[sec["at"]:] = ['<div class="%s">' % ("blk keep" if keep else "blk") + "".join(chunk) + "</div>"]
             if new_page:
                 out[sec["at"]] = out[sec["at"]].replace('class="blk', 'class="pbk blk', 1)
@@ -315,7 +422,7 @@ def markdown_to_html(md, base_dir, title):
     def flush():
         if para:
             if all(p.startswith("![") for p in para):
-                out.append('<div class="grid%s">' % (" one" if len(para) == 1 else "") + inline("".join(para)) + "</div>")
+                out.append('<div class="grid%s">' % (" one" if len(para) == 1 and "pareto" not in para[0] else " wide" if len(para) == 1 else "") + inline("".join(para)) + "</div>")
             else:
                 out.append("<p>" + inline("\n".join(para)).replace("\n", "<br>") + "</p>")
             para.clear()
@@ -329,10 +436,18 @@ def markdown_to_html(md, base_dir, title):
                 j += 1
             out.append("<pre>" + html.escape("\n".join(lines[i + 1:j])) + "</pre>")
             i = j + 1
+        elif m := re.match(r"\s*<!-- (columns|column|/columns) -->\s*$", line):  # two columns side by side (GitHub hides the markers and shows them stacked)
+            flush()
+            out.append({"columns": '<div class="cols"><div>', "column": "</div><div>", "/columns": "</div></div>"}[m.group(1)])
+            i += 1
+        elif re.match(r"\s*<!-- pagebreak -->\s*$", line):  # the next heading starts a new page
+            flush()
+            sec["break"] = True
+            i += 1
         elif line.lstrip().startswith("<!--"):
             flush()
-            if re.match(r"\s*<!-- auto:(results|times|plots|solutions|source)\b", line) and out and out[-1].startswith("<h2>"):
-                out[-1] = out[-1].replace("<h2>", '<h2 class="pb">', 1)  # new page before the Results, Running time, Visualisation, Best solutions and Source code sections
+            if re.match(r"\s*<!-- auto:(results|times|solutions|source)\b", line) and out and out[-1].startswith("<h2>"):
+                out[-1] = out[-1].replace("<h2>", '<h2 class="pb">', 1)  # new page before the Results, Running time, Best solutions and Source code sections
             while "-->" not in lines[i]:
                 i += 1
             i += 1
@@ -341,12 +456,14 @@ def markdown_to_html(md, base_dir, title):
             if len(m.group(1)) <= 3:
                 close_block()
             if len(m.group(1)) == 2:
-                sec["n"] = 0
+                sec["n"], sec["h2"] = 0, m.group(2)
             if len(m.group(1)) == 3:
+                sec["h3"] = m.group(2)
                 sec["first"] = sec["n"] == 0
                 sec["n"] += 1
                 sec["at"] = len(out)
-            out.append(f"<h{len(m.group(1))}>{inline(m.group(2))}</h{len(m.group(1))}>")
+            page_break = ' class="pb"' if sec.pop("break", False) else ""
+            out.append(f"<h{len(m.group(1))}{page_break}>{inline(m.group(2))}</h{len(m.group(1))}>")
             i += 1
         elif line.startswith("|"):
             flush()
@@ -382,11 +499,11 @@ def markdown_to_html(md, base_dir, title):
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(title)}</title><style>
 body{{font:13px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#222;margin:0}}
 h1{{font-size:24px;margin:0 0 .3em}}h2{{font-size:18px;border-bottom:1px solid #ddd;padding-bottom:3px;margin-top:1.8em}}
-h2.pb,.pbk{{break-before:page}}h3{{font-size:15px;margin:1.3em 0 .4em}}h2,h3{{break-after:avoid}}
+.pb,.pbk{{break-before:page}}h3{{font-size:15px;margin:1.3em 0 .4em}}h2,h3{{break-after:avoid}}
 table{{break-inside:avoid;border-collapse:collapse;margin:.5em 0}}td,th{{border:1px solid #ccc;padding:4px 9px}}th{{background:#f3f3f3;text-align:left}}
 pre{{background:#f5f5f5;padding:9px;font-size:11px;white-space:pre-wrap;break-inside:avoid}}code{{background:#f0f0f0;padding:0 3px}}
-.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}}.grid.one{{grid-template-columns:1fr;width:25%;margin:0 auto}}figure{{margin:0;text-align:center;font-size:9px;break-inside:avoid}}
-img{{width:100%;border:1px solid #ddd}}p{{margin:.5em 0;overflow-wrap:anywhere}}a{{color:#1a55a5}}
+.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}}.grid.wide{{grid-template-columns:1fr;width:95%;margin:0}}.grid.wide figcaption{{display:none}}.grid.one{{grid-template-columns:1fr;width:25%;margin:0 auto}}figure{{margin:0;text-align:center;font-size:9px;break-inside:avoid}}
+img{{width:100%;border:1px solid #ddd}}.cols{{display:flex;gap:18px;align-items:flex-start;break-inside:avoid}}.cols>div{{flex:1 1 0;min-width:0}}.cols>div+div{{flex:0 0 38%}}.cols .grid.one{{width:100%}}.cols img{{border:none}}p{{margin:.5em 0;overflow-wrap:anywhere}}a{{color:#1a55a5}}
 </style></head><body>{body}</body></html>"""
 
 
