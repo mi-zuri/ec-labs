@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 456" width="400" height="456" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#1c2230">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0L10,5L0,10z" fill="#3157d5"/>
+    </marker>
+  </defs>
+  <rect width="400" height="456" fill="#fff"/>
+
+  <!-- start -->
+  <rect x="20" y="8" width="290" height="56" rx="28" fill="#3157d5"/>
+  <text x="165" y="32" text-anchor="middle" fill="#fff" font-weight="bold">tour = [start]</text>
+  <text x="165" y="51" text-anchor="middle" fill="#fff" font-size="11">greedy cycle: + best partner → 2-node cycle</text>
+  <line x1="165" y1="64" x2="165" y2="101" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- loop condition -->
+  <path d="M165,103L240,135L165,167L90,135z" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="140" text-anchor="middle" font-weight="bold">|tour| &lt; k ?</text>
+  <line x1="240" y1="135" x2="298" y2="135" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="268" y="128" text-anchor="middle" font-size="11" fill="#4a5163">no</text>
+  <rect x="300" y="115" width="90" height="40" rx="20" fill="#3157d5"/>
+  <text x="345" y="140" text-anchor="middle" fill="#fff" font-weight="bold">return tour</text>
+  <line x1="165" y1="167" x2="165" y2="198" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="174" y="187" font-size="11" fill="#4a5163">yes</text>
+
+  <!-- insertion increases -->
+  <rect x="20" y="200" width="290" height="48" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="220" text-anchor="middle" font-weight="bold">for every unused node u:</text>
+  <text x="165" y="238" text-anchor="middle">Δ of every insertion position</text>
+  <line x1="165" y1="248" x2="165" y2="272" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- core calculations -->
+  <rect x="20" y="274" width="290" height="94" rx="6" fill="#fff4dc" stroke="#e0a526" stroke-width="2"/>
+  <text x="165" y="295" text-anchor="middle">best = smallest Δ,  second = 2nd smallest</text>
+  <text x="165" y="315" text-anchor="middle">regret = second − best</text>
+  <text x="165" y="335" text-anchor="middle">best_change = best + cost(u)</text>
+  <text x="165" y="357" text-anchor="middle" font-weight="bold">score = α·regret − β·best_change</text>
+  <line x1="165" y1="368" x2="165" y2="392" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- insertion -->
+  <rect x="20" y="394" width="290" height="54" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="416" text-anchor="middle" font-weight="bold">u* = node with the highest score</text>
+  <text x="165" y="436" text-anchor="middle">insert u* at its best position</text>
+
+  <!-- back to the loop condition -->
+  <path d="M20,421H8V135H88" fill="none" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>
