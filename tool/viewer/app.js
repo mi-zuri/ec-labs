@@ -6,6 +6,9 @@ const $ = (id) => document.getElementById(id);
 const LANG_ORDER = ["python", "c", "cpp", "rust"];
 const COST_STOPS = [[42, 157, 143], [233, 196, 106], [228, 87, 46]]; // cheap -> expensive
 
+const START_COLOR = "#e11d2e"; // the start node is marked with a red X, the first edges start red
+const FADE_FRACTION = 0.15;  // the first 15% of the tour length fades from red to the tour colour
+
 const S = {
   catalog: null,
   lab: null,        // lab object from the catalog
@@ -115,6 +118,27 @@ function evaluate(tour) {
     cost += S.inst.nodes[tour[i]][2];
   }
   return { len, cost, obj: len + cost };
+}
+
+/** Edges [a, b, fA, fB] at the start of the tour, a -> b.
+ *  f is the fade position: 0 = red at the start node, 1 = tour colour after FADE_FRACTION of the tour length (fB may exceed 1). */
+function* fadeEdges(tour) {
+  const nodes = S.inst.nodes;
+  const dist = (a, b) => Math.hypot(nodes[a][0] - nodes[b][0], nodes[a][1] - nodes[b][1]);
+  let tourLength = 0;
+  for (let i = 0; i < tour.length; i++) tourLength += dist(tour[i], tour[(i + 1) % tour.length]);
+  const fadeLength = FADE_FRACTION * tourLength;
+  let walked = 0; // distance from the start to the beginning of the current edge
+  for (let i = 0; i + 1 < tour.length && walked < fadeLength; i++) {
+    const length = dist(tour[i], tour[i + 1]);
+    yield [tour[i], tour[i + 1], walked / fadeLength, (walked + length) / fadeLength];
+    walked += length;
+  }
+}
+
+function hexToRgb(hex) {
+  const v = parseInt(hex.replace("#", ""), 16);
+  return [v >> 16, (v >> 8) & 255, v & 255];
 }
 
 function costColor(t) {
@@ -490,6 +514,24 @@ function drawPlot(canvas, tour, o = {}) {
     }
   }
 
+  if (tour && tour.length > 1) { // the start of the tour fades from red to the tour colour: shows where it starts and its direction
+    const from = hexToRgb(START_COLOR), to = hexToRgb(tourColor);
+    const fadeColor = (f) => `rgb(${from.map((v, c) => Math.round(v + (to[c] - v) * Math.min(f, 1))).join(",")})`;
+    ctx.lineWidth = o.small ? 1.8 : 3;
+    ctx.lineCap = "round";
+    for (const [a, b, fA, fB] of fadeEdges(tour)) {
+      const gradient = ctx.createLinearGradient(X(a), Y(a), X(b), Y(b));
+      gradient.addColorStop(0, fadeColor(fA));
+      gradient.addColorStop(Math.min(1, (1 - fA) / (fB - fA)), fadeColor(fB)); // the fade is complete here, the rest of the edge keeps this colour
+      ctx.strokeStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(X(a), Y(a));
+      ctx.lineTo(X(b), Y(b));
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+  }
+
   const inTour = new Set(tour || []);
   const anyTour = inTour.size > 0;
   for (let i = 0; i < nodes.length; i++) {
@@ -508,6 +550,20 @@ function drawPlot(canvas, tour, o = {}) {
     }
   }
   ctx.globalAlpha = 1;
+
+  if (tour && tour.length) { // the start node (first in the tour) is marked with a red X
+    const x = X(tour[0]), y = Y(tour[0]), d = o.small ? 3.5 : 7;
+    ctx.lineCap = "round";
+    for (const [color, width] of [["#fff", o.small ? 3.4 : 5], [START_COLOR, o.small ? 1.6 : 2.6]]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d);
+      ctx.moveTo(x - d, y + d); ctx.lineTo(x + d, y - d);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+  }
 
   const ring = (i, color, radius) => {
     ctx.strokeStyle = color;
