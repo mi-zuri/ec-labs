@@ -8,31 +8,64 @@ Each instance contains nodes with coordinates (x, y) and a cost. Select exactly 
 
 ## Algorithms
 
-200 solutions per greedy method (one starting from each node) and 200 random solutions. "Nearest" always means the best increase of the objective (distance change + node cost), not distance alone.
+Three greedy construction methods, 200 runs each (run i starts from node i), and 200 random solutions as a baseline. All greedy methods add one node per step, the one that increases the objective the least, and differ only in **where the new node may be inserted**.
+
+### Intuition
+
+A greedy method builds the solution one node at a time and never undoes a choice. "Nearest" here means the smallest increase of the objective, so both the added length and the node cost count: a close but expensive node can lose to a farther cheap one.
+
+The more places a node may go, the better each step can be. Nearest neighbor (end only) can only extend the path at its end, so it walks away from the start and pays a long closing edge at the end. Inserting at any position lets a node slip in between two tour nodes it lies close to. Greedy cycle keeps the tour closed all the time, so the closing edge is already paid for in every step.
+
+Example: the path ends at c, and node u lies 40 away from c but right next to the edge (a, b). End only must pay 40, any position pays d(a, u) + d(u, b) − d(a, b), e.g. 5.
+
+### Core calculations
+
+<!-- columns -->
+For every unused node u, the objective increase of adding it:
+
+Between tour nodes a and b:
+`Δ = d(a, u) + d(u, b) − d(a, b) + cost(u)`
+
+In front of the path: `Δ = d(u, first) + cost(u)`
+
+After the path (the only option of end only): `Δ = d(last, u) + cost(u)`
+
+The (node, position) with the smallest Δ is inserted. The path is closed into a cycle at the end.
+
+| Method | Start | u may go |
+|---|---|---|
+| Random | k random nodes | – |
+| NN (end only) | [start] | after the last node |
+| NN (any position) | [start] | front, between nodes, end |
+| Greedy cycle | [start, best partner] | into any cycle edge |
+
+Best partner = the node minimising `d(start, v) + cost(v)`.
+<!-- column -->
+![](figures/greedy_flowchart.svg)
+<!-- /columns -->
+
+<!-- pagebreak -->
+### Pseudocode
+
+Simplified from `python/solver.py`. The three greedy methods share the loop; they differ in the starting tour and in how the next node and its position are found.
 
 ```
-Random:
-  tour = first k nodes of a random permutation
+def greedy(start):
+    tour = [start]                                     # greedy cycle: + nearest partner
+    while len(tour) < k:
+        node, position = cheapest_insertion(tour)      # end only: nearest_unused_node(tour[-1]), at the end
+        tour.insert(position, node)
+    return tour
 
-Nearest neighbour, end only (start):
-  tour = [start]
-  while |tour| < k:
-      u = unvisited node minimising dist(last, u) + cost(u)
-      append u
+def cheapest_insertion(tour):
+    for u in unused_nodes:
+        length_increase, position = cheapest_position(tour, u)   # in the path or in the cycle
+        value = length_increase + cost[u]
+    return the u with the smallest value, and its position
 
-Nearest neighbour, any position (start):
-  tour = [start]
-  while |tour| < k:
-      for each unvisited u and each position p (front, between two nodes, end):
-          delta = added path length + cost(u)
-      insert the (u, p) with the smallest delta
-
-Greedy cycle (start):
-  v = unvisited node minimising dist(start, v) + cost(v);  tour = [start, v]
-  while |tour| < k:
-      for each unvisited u and each cycle edge (a, b):
-          delta = d(a, u) + d(u, b) - d(a, b) + cost(u)
-      insert the (u, edge) with the smallest delta
+def random_solution(seed):
+    shuffle(nodes)
+    return nodes[:k]
 ```
 
 ## Results
@@ -44,21 +77,35 @@ Results are identical in all implemented languages: **yes**.
 
 ### Instance TSPA
 
-| Method | Min | Max | Avg | Best solution checked |
-|---|--:|--:|--:|:-:|
-| Random solution | 237131 | 287973 | 263514 | yes |
-| Nearest neighbor (end only) | 84362 | 90075 | 87477 | yes |
-| Nearest neighbor (any position) | **72328** | 77022 | 74347 | yes |
-| Greedy cycle | 72590 | **75281** | **73797** | yes |
+| Method | Min | Max | Avg |
+|---|--:|--:|--:|
+| Random solution | 237131 | 287973 | 263514 |
+| Nearest neighbor (end only) | 84362 | 90075 | 87477 |
+| Nearest neighbor (any position) | **72328** | 77022 | 74347 |
+| Greedy cycle | 72590 | **75281** | **73797** |
+
+### Visualisation (Instance TSPA)
+
+![Random solution<br>**237131** (length 140636 + cost 96495)](report_files/TSPA_lab1_random.svg)
+![Nearest neighbor (end only)<br>**84362** (length 31319 + cost 53043)](report_files/TSPA_lab1_nn_end.svg)
+![Nearest neighbor (any position)<br>**72328** (length 21816 + cost 50512)](report_files/TSPA_lab1_nn_any.svg)
+![Greedy cycle<br>**72590** (length 21570 + cost 51020)](report_files/TSPA_lab1_greedy_cycle.svg)
 
 ### Instance TSPB
 
-| Method | Min | Max | Avg | Best solution checked |
-|---|--:|--:|--:|:-:|
-| Random solution | 188214 | 231879 | 206802 | yes |
-| Nearest neighbor (end only) | 56007 | **63166** | **59397** | yes |
-| Nearest neighbor (any position) | **52915** | 66164 | 59475 | yes |
-| Greedy cycle | 53016 | 63736 | 59709 | yes |
+| Method | Min | Max | Avg |
+|---|--:|--:|--:|
+| Random solution | 188214 | 231879 | 206802 |
+| Nearest neighbor (end only) | 56007 | **63166** | **59397** |
+| Nearest neighbor (any position) | **52915** | 66164 | 59475 |
+| Greedy cycle | 53016 | 63736 | 59709 |
+
+### Visualisation (Instance TSPB)
+
+![Random solution<br>**188214** (length 138112 + cost 50102)](report_files/TSPB_lab1_random.svg)
+![Nearest neighbor (end only)<br>**56007** (length 24632 + cost 31375)](report_files/TSPB_lab1_nn_end.svg)
+![Nearest neighbor (any position)<br>**52915** (length 20068 + cost 32847)](report_files/TSPB_lab1_nn_any.svg)
+![Greedy cycle<br>**53016** (length 16704 + cost 36312)](report_files/TSPB_lab1_greedy_cycle.svg)
 <!-- /auto:results -->
 
 ## Running time
@@ -75,6 +122,10 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 | Nearest neighbor (any position) | 24.39 ms | 534.2 µs | **481.1 µs** | 567.2 µs |
 | Greedy cycle | 22.58 ms | 687.4 µs | **462.6 µs** | 648.7 µs |
 
+### Pareto plot (Instance TSPA)
+
+![Pareto plot, instance TSPA](report_files/TSPA_pareto.svg)
+
 ### Instance TSPB
 
 | Method | Python | C | C++ | Rust |
@@ -83,27 +134,11 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 | Nearest neighbor (end only) | 360.0 µs | **15.6 µs** | 24.0 µs | 18.3 µs |
 | Nearest neighbor (any position) | 23.51 ms | 529.4 µs | **515.9 µs** | 561.6 µs |
 | Greedy cycle | 21.92 ms | 541.8 µs | **464.2 µs** | 639.2 µs |
+
+### Pareto plot (Instance TSPB)
+
+![Pareto plot, instance TSPB](report_files/TSPB_pareto.svg)
 <!-- /auto:times -->
-
-## Visualisation of the best solutions
-
-<!-- auto:plots (generated: edits between these markers are overwritten) -->
-Node colour and size show the node cost (dark and large = expensive). Grey dots are nodes not selected.
-
-### Instance TSPA
-
-![Random solution<br>**237131** (length 140636 + cost 96495)](report_files/TSPA_lab1_random.svg)
-![Nearest neighbor (end only)<br>**84362** (length 31319 + cost 53043)](report_files/TSPA_lab1_nn_end.svg)
-![Nearest neighbor (any position)<br>**72328** (length 21816 + cost 50512)](report_files/TSPA_lab1_nn_any.svg)
-![Greedy cycle<br>**72590** (length 21570 + cost 51020)](report_files/TSPA_lab1_greedy_cycle.svg)
-
-### Instance TSPB
-
-![Random solution<br>**188214** (length 138112 + cost 50102)](report_files/TSPB_lab1_random.svg)
-![Nearest neighbor (end only)<br>**56007** (length 24632 + cost 31375)](report_files/TSPB_lab1_nn_end.svg)
-![Nearest neighbor (any position)<br>**52915** (length 20068 + cost 32847)](report_files/TSPB_lab1_nn_any.svg)
-![Greedy cycle<br>**53016** (length 16704 + cost 36312)](report_files/TSPB_lab1_greedy_cycle.svg)
-<!-- /auto:plots -->
 
 ## Best solutions (0-based node indices)
 
@@ -140,13 +175,11 @@ Node colour and size show the node cost (dark and large = expensive). Grey dots 
 ## Source code
 
 <!-- auto:source (generated: edits between these markers are overwritten) -->
-Source code of the compared labs:
-
-- Lab 1: [labs/lab1](https://github.com/mi-zuri/ec-labs/tree/main/labs/lab1) ([Python](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/python/solver.py), [C](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/c/solver.c), [C++](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/cpp/solver.cpp), [Rust](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/rust/solver.rs))
+[labs/lab1](https://github.com/mi-zuri/ec-labs/tree/main/labs/lab1) ([Python](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/python/solver.py), [C](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/c/solver.c), [C++](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/cpp/solver.cpp), [Rust](https://github.com/mi-zuri/ec-labs/blob/main/labs/lab1/rust/solver.rs))
 <!-- /auto:source -->
 
 ## Conclusions
 
 - Random solutions are about 3.5 times worse than any greedy method.
-- On TSPA, inserting at any position (nearest neighbour any position, greedy cycle) is clearly better than appending at the end (average about 74000 vs 87500).
-- Greedy methods are deterministic given the start node, so the spread comes only from the start choice; trying every start and keeping the best is cheap and worthwhile.
+- Inserting at any position beats appending at the end on TSPA; on TSPB all greedy methods are close on average.
+- Insertion at any position runs about 30 times longer than end only, but still well under 1 ms per run.
