@@ -1,0 +1,13 @@
+{
+  "title": "Local search",
+  "methods": [
+    { "id": "ls_steepest_nodes_random", "name": "Steepest LS, nodes exchange, random start", "short": "Steepest LS, nodes, random start", "shape": "cycle" },
+    { "id": "ls_steepest_edges_random", "name": "Steepest LS, edges exchange, random start", "short": "Steepest LS, edges, random start", "shape": "cycle" },
+    { "id": "ls_greedy_nodes_random", "name": "Greedy LS, nodes exchange, random start", "short": "Greedy LS, nodes, random start", "shape": "cycle" },
+    { "id": "ls_greedy_edges_random", "name": "Greedy LS, edges exchange, random start", "short": "Greedy LS, edges, random start", "shape": "cycle" },
+    { "id": "ls_steepest_nodes_greedy", "name": "Steepest LS, nodes exchange, greedy start", "short": "Steepest LS, nodes, greedy start", "shape": "cycle" },
+    { "id": "ls_steepest_edges_greedy", "name": "Steepest LS, edges exchange, greedy start", "short": "Steepest LS, edges, greedy start", "shape": "cycle" },
+    { "id": "ls_greedy_nodes_greedy", "name": "Greedy LS, nodes exchange, greedy start", "short": "Greedy LS, nodes, greedy start", "shape": "cycle" },
+    { "id": "ls_greedy_edges_greedy", "name": "Greedy LS, edges exchange, greedy start", "short": "Greedy LS, edges, greedy start", "shape": "cycle" }
+  ]
+}

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 456" width="400" height="456" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#1c2230">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0L10,5L0,10z" fill="#3157d5"/>
+    </marker>
+  </defs>
+  <rect width="400" height="456" fill="#fff"/>
+
+  <!-- start -->
+  <rect x="20" y="8" width="290" height="56" rx="28" fill="#3157d5"/>
+  <text x="165" y="32" text-anchor="middle" fill="#fff" font-weight="bold">complete starting tour</text>
+  <text x="165" y="51" text-anchor="middle" fill="#fff" font-size="11">random or greedy cycle, 2-regret + best change</text>
+  <line x1="165" y1="64" x2="165" y2="94" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- list of moves -->
+  <rect x="20" y="96" width="290" height="48" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="116" text-anchor="middle" font-weight="bold">moves = all inter + intra moves</text>
+  <text x="165" y="134" text-anchor="middle">intra: nodes or edges exchange</text>
+  <line x1="165" y1="144" x2="165" y2="168" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- core calculations -->
+  <rect x="20" y="170" width="290" height="94" rx="6" fill="#fff4dc" stroke="#e0a526" stroke-width="2"/>
+  <text x="165" y="192" text-anchor="middle" font-weight="bold">Δ of a move from the changed edges</text>
+  <text x="165" y="214" text-anchor="middle">steepest: Δ of all moves, keep the min</text>
+  <text x="165" y="234" text-anchor="middle">greedy: moves in random order,</text>
+  <text x="165" y="252" text-anchor="middle">stop at the first Δ &lt; 0</text>
+  <line x1="165" y1="264" x2="165" y2="290" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- loop condition -->
+  <path d="M165,292L250,324L165,356L80,324z" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="329" text-anchor="middle" font-weight="bold">found Δ &lt; 0 ?</text>
+  <line x1="250" y1="324" x2="298" y2="324" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="272" y="317" text-anchor="middle" font-size="11" fill="#4a5163">no</text>
+  <rect x="300" y="304" width="90" height="40" rx="20" fill="#3157d5"/>
+  <text x="345" y="329" text-anchor="middle" fill="#fff" font-weight="bold">return tour</text>
+  <line x1="165" y1="356" x2="165" y2="388" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="174" y="376" font-size="11" fill="#4a5163">yes</text>
+
+  <!-- apply -->
+  <rect x="20" y="390" width="290" height="54" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="412" text-anchor="middle" font-weight="bold">apply the move</text>
+  <text x="165" y="432" text-anchor="middle">swap nodes / reverse a segment</text>
+
+  <!-- back to the move search -->
+  <path d="M20,417H8V217H18" fill="none" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>
