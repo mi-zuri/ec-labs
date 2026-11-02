@@ -71,18 +71,16 @@ def random_solution(seed):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method. The best value in each column is in bold.
+Objective = cycle length + sum of node costs, over 200 runs per method. Each cell is av (min – max); the best value of each kind per instance is in bold.
 All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
 Results are identical in all implemented languages: **yes**.
 
-### Instance TSPA
-
-| Method | Min | Max | Avg |
-|---|--:|--:|--:|
-| Random solution | 237131 | 287973 | 263514 |
-| Nearest neighbor (end only) | 84362 | 90075 | 87477 |
-| Nearest neighbor (any position) | **72328** | 77022 | 74347 |
-| Greedy cycle | 72590 | **75281** | **73797** |
+| Method | TSPA | TSPB |
+|---|:-:|:-:|
+| Random solution | 263514 (237131 – 287973) | 206802 (188214 – 231879) |
+| Nearest neighbor (end only) | 87477 (84362 – 90075) | **59397** (56007 – **63166**) |
+| Nearest neighbor (any position) | 74347 (**72328** – 77022) | 59475 (**52915** – 66164) |
+| Greedy cycle | **73797** (72590 – **75281**) | 59709 (53016 – 63736) |
 
 ### Visualisation (Instance TSPA)
 
@@ -90,15 +88,6 @@ Results are identical in all implemented languages: **yes**.
 ![Nearest neighbor (end only)<br>**84362** (length 31319 + cost 53043)](report_files/TSPA_lab1_nn_end.svg)
 ![Nearest neighbor (any position)<br>**72328** (length 21816 + cost 50512)](report_files/TSPA_lab1_nn_any.svg)
 ![Greedy cycle<br>**72590** (length 21570 + cost 51020)](report_files/TSPA_lab1_greedy_cycle.svg)
-
-### Instance TSPB
-
-| Method | Min | Max | Avg |
-|---|--:|--:|--:|
-| Random solution | 188214 | 231879 | 206802 |
-| Nearest neighbor (end only) | 56007 | **63166** | **59397** |
-| Nearest neighbor (any position) | **52915** | 66164 | 59475 |
-| Greedy cycle | 53016 | 63736 | 59709 |
 
 ### Visualisation (Instance TSPB)
 
@@ -117,10 +106,10 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Random solution | 77.6 µs | 380 ns | 321 ns | **295 ns** |
-| Nearest neighbor (end only) | 374.0 µs | **14.0 µs** | 20.4 µs | 23.5 µs |
-| Nearest neighbor (any position) | 24.39 ms | 534.2 µs | **481.1 µs** | 567.2 µs |
-| Greedy cycle | 22.58 ms | 687.4 µs | **462.6 µs** | 648.7 µs |
+| Random solution | 0.0776 ms | 0.0004 ms | 0.0003 ms | **0.0003 ms** |
+| Nearest neighbor (end only) | 0.3740 ms | **0.0140 ms** | 0.0204 ms | 0.0235 ms |
+| Nearest neighbor (any position) | 24.39 ms | 0.5342 ms | **0.4811 ms** | 0.5672 ms |
+| Greedy cycle | 22.58 ms | 0.6874 ms | **0.4626 ms** | 0.6487 ms |
 
 ### Pareto plot (Instance TSPA)
 
@@ -130,10 +119,10 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Random solution | 70.2 µs | **425 ns** | 481 ns | 500 ns |
-| Nearest neighbor (end only) | 360.0 µs | **15.6 µs** | 24.0 µs | 18.3 µs |
-| Nearest neighbor (any position) | 23.51 ms | 529.4 µs | **515.9 µs** | 561.6 µs |
-| Greedy cycle | 21.92 ms | 541.8 µs | **464.2 µs** | 639.2 µs |
+| Random solution | 0.0702 ms | **0.0004 ms** | 0.0005 ms | 0.0005 ms |
+| Nearest neighbor (end only) | 0.3600 ms | **0.0156 ms** | 0.0240 ms | 0.0183 ms |
+| Nearest neighbor (any position) | 23.51 ms | 0.5293 ms | **0.5159 ms** | 0.5616 ms |
+| Greedy cycle | 21.92 ms | 0.5417 ms | **0.4642 ms** | 0.6392 ms |
 
 ### Pareto plot (Instance TSPB)
 
