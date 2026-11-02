@@ -8,7 +8,7 @@ Each instance contains nodes with coordinates (x, y) and a cost. Select exactly 
 
 ## Algorithms
 
-Eight local search methods, 200 runs each: steepest or greedy × nodes or edges exchange inside the tour × random start (run i uses seed 42 + i) or greedy start (lab 2's best heuristic, greedy cycle with 2-regret + best change, run i starts from node i). Instead of building a tour, they take a complete one and keep improving it with small moves.
+Eight local search methods, 200 runs each: steepest or greedy × nodes or edges exchange inside the tour × random start (run i uses seed 42 + i) or greedy start (lab 2's best heuristic, greedy cycle with 2-regret + best change, run i starts from node i). Instead of building a tour, they take a complete one and keep improving it with small moves. The greedy start uses the heuristic with the best TSPA average in lab 2 (73 350); on TSPB the nearest neighbor variant with 2-regret + best change was better (55 698 vs 57 751), so the TSPB greedy starts are not the best available ones.
 
 ### Intuition
 
@@ -229,6 +229,8 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 ## Conclusions
 
-- Edges exchange is much better than nodes exchange from random starts (average TSPA 76 225 vs 89 742, TSPB 52 461 vs 66 055), because one 2-opt move can remove a crossing; from greedy starts all four variants end within 1 % of each other, since the start is already close to a local optimum.
-- Local search beats every earlier method: the best average drops from 73 350 to 72 971 on TSPA (greedy LS, edges, greedy start) and from 55 698 to 52 461 on TSPB (steepest LS, edges, random start), where random starts with edges exchange beat the greedy starts.
-- Greedy LS reaches the same quality as steepest LS about 4× faster from random starts (C: 0.86 ms vs 3.48 ms on TSPA, edges), and local search after the greedy start adds almost nothing to the ~1 ms of the construction.
+- Local search beats every earlier method: the best average drops from 73 350 to 72 971 on TSPA and from 55 698 to 52 461 on TSPB.
+- Edges exchange is much better than nodes exchange from random starts (average TSPA 76 225 vs 89 742, TSPB 52 461 vs 66 055).
+- From greedy starts all four variants end within 1 % of each other, since the start is already close to a local optimum.
+- Greedy LS reaches the same quality as steepest LS about 4× faster from random starts.
+- **Two results break the expected pattern.** On TSPB random starts beat greedy starts (52 461 vs 57 019): the construction builds a short tour through expensive nodes, and local search cannot move it to a cheaper region. From greedy starts greedy LS is slower than steepest LS: improving moves are rare near a local optimum, so greedy browses most of the neighborhood anyway and pays for a random draw on every move.
