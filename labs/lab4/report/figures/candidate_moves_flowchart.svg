@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 530" width="400" height="530" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#1c2230">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0L10,5L0,10z" fill="#3157d5"/>
+    </marker>
+  </defs>
+  <rect width="400" height="530" fill="#fff"/>
+
+  <!-- start -->
+  <rect x="20" y="8" width="290" height="56" rx="28" fill="#3157d5"/>
+  <text x="165" y="32" text-anchor="middle" fill="#fff" font-weight="bold">complete starting tour</text>
+  <text x="165" y="51" text-anchor="middle" fill="#fff" font-size="11">random k nodes in random order</text>
+  <line x1="165" y1="64" x2="165" y2="94" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- candidate lists -->
+  <rect x="20" y="96" width="290" height="48" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="116" text-anchor="middle" font-weight="bold">N(a) = 10 nearest nodes of every a</text>
+  <text x="165" y="134" text-anchor="middle">nearest by d(a, b) + c(b), computed once</text>
+  <line x1="165" y1="144" x2="165" y2="168" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- core calculations -->
+  <rect x="20" y="170" width="290" height="132" rx="6" fill="#fff4dc" stroke="#e0a526" stroke-width="2"/>
+  <text x="165" y="192" text-anchor="middle" font-weight="bold">candidate moves only</text>
+  <text x="165" y="214" text-anchor="middle">for every a in the tour, b in N(a):</text>
+  <text x="165" y="234" text-anchor="middle">the 2 moves that add edge (a, b)</text>
+  <text x="165" y="252" text-anchor="middle" font-size="11">b outside: b replaces succ(a) / pred(a)</text>
+  <text x="165" y="268" text-anchor="middle" font-size="11">b inside: 2-opt with succ / pred edges</text>
+  <text x="165" y="290" text-anchor="middle">Δ of each, keep the min</text>
+  <line x1="165" y1="302" x2="165" y2="328" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- loop condition -->
+  <path d="M165,330L250,362L165,394L80,362z" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="367" text-anchor="middle" font-weight="bold">min Δ &lt; 0 ?</text>
+  <line x1="250" y1="362" x2="298" y2="362" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="272" y="355" text-anchor="middle" font-size="11" fill="#4a5163">no</text>
+  <rect x="300" y="342" width="90" height="40" rx="20" fill="#3157d5"/>
+  <text x="345" y="367" text-anchor="middle" fill="#fff" font-weight="bold">return tour</text>
+  <line x1="165" y1="394" x2="165" y2="426" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="174" y="414" font-size="11" fill="#4a5163">yes</text>
+
+  <!-- apply -->
+  <rect x="20" y="428" width="290" height="54" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="165" y="450" text-anchor="middle" font-weight="bold">apply the move</text>
+  <text x="165" y="470" text-anchor="middle">exchange a node / reverse a segment</text>
+
+  <!-- back to the move search -->
+  <path d="M20,455H8V236H18" fill="none" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>

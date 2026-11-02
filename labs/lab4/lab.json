@@ -1,0 +1,6 @@
+{
+  "title": "Candidate moves",
+  "methods": [
+    { "id": "ls_candidates_steepest_edges_random", "name": "Steepest LS, edges exchange, candidate moves, random start", "short": "Steepest LS, candidates, random start", "shape": "cycle" }
+  ]
+}
