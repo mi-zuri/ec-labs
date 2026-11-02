@@ -12,7 +12,7 @@ One method, 200 runs: steepest local search with lab 3's best neighborhood (inte
 
 ### Intuition
 
-Steepest local search spends almost all its time on hopeless moves: in a good tour nearly every edge joins a node to one of its few nearest nodes, so a move that adds an edge to a far node must remove even longer edges just to break even, and that almost never happens. Candidate moves skip them: for every node we keep a short list of its nearest nodes, and evaluate only moves that bring one of these short edges into the tour. Example: one step of the full search evaluates 100 · 100 + 100 · 99 / 2 = 14 950 moves; the candidate search evaluates at most 100 · 10 · 2 = 2 000, about 7× fewer, and the improving moves it skips are rare (they are the price paid in quality).
+Steepest local search spends almost all its time on hopeless moves: in a good tour nearly every edge joins a node to one of its few nearest nodes, so a move that adds an edge to a far node must remove even longer edges just to break even, and that almost never happens. Candidate moves skip them: for every node we keep a short list of its nearest nodes, and evaluate only moves that bring one of these short edges into the tour. Example: one step of the full search evaluates 100 · 100 + 100 · 99 / 2 = 14 950 moves; the candidate search evaluates at most 100 · 10 · 2 = 2 000, 7.5× fewer. The improving moves it skips are the price paid in quality: small on TSPB, 5 % on TSPA.
 
 ### Core calculations
 
@@ -88,7 +88,7 @@ def apply_move(tour, position, move):
     if kind == SWAP_EDGES:        reverse tour[i+1 .. j], update positions in it
 ```
 
-**Why only these moves.** An exchange that replaces a itself with b would not create edge (a, b), so b replaces a neighbour of a instead. Each candidate edge can be added by exactly two moves of each kind, and they are generated directly, so no move outside the candidate set is ever looked at.
+**Why only these moves.** An exchange that replaces a itself with b would not create edge (a, b), so b replaces a neighbour of a instead. Each candidate edge can be added by exactly two moves, both of one kind: two node exchanges if b is not in the tour, two edges exchanges if it is. They are generated directly, so no move outside the candidate set is ever looked at.
 
 ## Results
 
@@ -100,37 +100,19 @@ Results are identical in all implemented languages: **yes**.
 | Method | TSPA | TSPB |
 |---|:-:|:-:|
 | Steepest LS, nodes exchange, random start | 89742 (81937 – 96386) | 66055 (59059 – 74933) |
-| Steepest LS, edges exchange, random start | 76225 (74248 – 79388) | **52461** (50265 – **55173**) |
-| Greedy LS, nodes exchange, random start | 87889 (81686 – 95320) | 63656 (56270 – 70172) |
-| Greedy LS, edges exchange, random start | 76265 (73545 – 78428) | 52913 (49955 – 55677) |
-| Steepest LS, nodes exchange, greedy start | 73018 (**71955** – **74682**) | 57376 (52778 – 63043) |
-| Steepest LS, edges exchange, greedy start | 72997 (**71955** – **74682**) | 57019 (52566 – 62301) |
-| Greedy LS, nodes exchange, greedy start | 73015 (**71955** – **74682**) | 57379 (52672 – 63043) |
-| Greedy LS, edges exchange, greedy start | **72971** (**71955** – **74682**) | 57067 (52672 – 62500) |
+| Steepest LS, edges exchange, random start | **76225** (**74248** – **79388**) | **52461** (50265 – **55173**) |
 | Steepest LS, edges exchange, candidate moves, random start | 80062 (76007 – 85627) | 52560 (**49902** – 55299) |
 
 ### Visualisation (Instance TSPA)
 
 ![Steepest LS, nodes exchange, random start<br>**81937** (length 30984 + cost 50953)](report_files/TSPA_lab3_ls_steepest_nodes_random.svg)
 ![Steepest LS, edges exchange, random start<br>**74248** (length 22259 + cost 51989)](report_files/TSPA_lab3_ls_steepest_edges_random.svg)
-![Greedy LS, nodes exchange, random start<br>**81686** (length 30012 + cost 51674)](report_files/TSPA_lab3_ls_greedy_nodes_random.svg)
-![Greedy LS, edges exchange, random start<br>**73545** (length 22205 + cost 51340)](report_files/TSPA_lab3_ls_greedy_edges_random.svg)
-![Steepest LS, nodes exchange, greedy start<br>**71955** (length 21123 + cost 50832)](report_files/TSPA_lab3_ls_steepest_nodes_greedy.svg)
-![Steepest LS, edges exchange, greedy start<br>**71955** (length 21123 + cost 50832)](report_files/TSPA_lab3_ls_steepest_edges_greedy.svg)
-![Greedy LS, nodes exchange, greedy start<br>**71955** (length 21123 + cost 50832)](report_files/TSPA_lab3_ls_greedy_nodes_greedy.svg)
-![Greedy LS, edges exchange, greedy start<br>**71955** (length 21123 + cost 50832)](report_files/TSPA_lab3_ls_greedy_edges_greedy.svg)
 ![Steepest LS, edges exchange, candidate moves, random start<br>**76007** (length 22323 + cost 53684)](report_files/TSPA_lab4_ls_candidates_steepest_edges_random.svg)
 
 ### Visualisation (Instance TSPB)
 
 ![Steepest LS, nodes exchange, random start<br>**59059** (length 28949 + cost 30110)](report_files/TSPB_lab3_ls_steepest_nodes_random.svg)
 ![Steepest LS, edges exchange, random start<br>**50265** (length 19741 + cost 30524)](report_files/TSPB_lab3_ls_steepest_edges_random.svg)
-![Greedy LS, nodes exchange, random start<br>**56270** (length 23242 + cost 33028)](report_files/TSPB_lab3_ls_greedy_nodes_random.svg)
-![Greedy LS, edges exchange, random start<br>**49955** (length 20215 + cost 29740)](report_files/TSPB_lab3_ls_greedy_edges_random.svg)
-![Steepest LS, nodes exchange, greedy start<br>**52778** (length 16865 + cost 35913)](report_files/TSPB_lab3_ls_steepest_nodes_greedy.svg)
-![Steepest LS, edges exchange, greedy start<br>**52566** (length 17522 + cost 35044)](report_files/TSPB_lab3_ls_steepest_edges_greedy.svg)
-![Greedy LS, nodes exchange, greedy start<br>**52672** (length 17168 + cost 35504)](report_files/TSPB_lab3_ls_greedy_nodes_greedy.svg)
-![Greedy LS, edges exchange, greedy start<br>**52672** (length 17168 + cost 35504)](report_files/TSPB_lab3_ls_greedy_edges_greedy.svg)
 ![Steepest LS, edges exchange, candidate moves, random start<br>**49902** (length 19786 + cost 30116)](report_files/TSPB_lab4_ls_candidates_steepest_edges_random.svg)
 <!-- /auto:results -->
 
@@ -145,12 +127,6 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 |---|--:|--:|--:|--:|
 | Steepest LS, nodes exchange, random start | 336.9 ms | 4.69 ms | **4.31 ms** | 6.62 ms |
 | Steepest LS, edges exchange, random start | 255.2 ms | 3.48 ms | **3.38 ms** | 4.13 ms |
-| Greedy LS, nodes exchange, random start | 70.59 ms | 1.29 ms | **1.26 ms** | 1.37 ms |
-| Greedy LS, edges exchange, random start | 44.41 ms | 0.8554 ms | **0.8143 ms** | 0.8704 ms |
-| Steepest LS, nodes exchange, greedy start | 45.03 ms | 0.9084 ms | **0.8863 ms** | 0.9632 ms |
-| Steepest LS, edges exchange, greedy start | 43.54 ms | 0.8906 ms | **0.8749 ms** | 0.9478 ms |
-| Greedy LS, nodes exchange, greedy start | 52.27 ms | 1.08 ms | **1.05 ms** | 1.13 ms |
-| Greedy LS, edges exchange, greedy start | 50.53 ms | 1.06 ms | **1.04 ms** | 1.11 ms |
 | Steepest LS, edges exchange, candidate moves, random start | 54.18 ms | **0.6827 ms** | 1.24 ms | 1.03 ms |
 
 ### Pareto plot (Instance TSPA)
@@ -163,12 +139,6 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 |---|--:|--:|--:|--:|
 | Steepest LS, nodes exchange, random start | 329.3 ms | 4.57 ms | **4.37 ms** | 5.46 ms |
 | Steepest LS, edges exchange, random start | 294.9 ms | 3.54 ms | **3.44 ms** | 4.28 ms |
-| Greedy LS, nodes exchange, random start | 74.65 ms | 1.34 ms | **1.27 ms** | 1.29 ms |
-| Greedy LS, edges exchange, random start | 48.77 ms | **0.8300 ms** | 0.8732 ms | 0.9377 ms |
-| Steepest LS, nodes exchange, greedy start | 52.11 ms | 1.05 ms | **1.00 ms** | 1.10 ms |
-| Steepest LS, edges exchange, greedy start | 59.17 ms | 1.12 ms | **1.04 ms** | 1.16 ms |
-| Greedy LS, nodes exchange, greedy start | 57.89 ms | 1.17 ms | **1.12 ms** | 1.23 ms |
-| Greedy LS, edges exchange, greedy start | 59.31 ms | 1.21 ms | **1.18 ms** | 1.26 ms |
 | Steepest LS, edges exchange, candidate moves, random start | 56.34 ms | **0.6627 ms** | 1.17 ms | 0.9814 ms |
 
 ### Pareto plot (Instance TSPB)
@@ -198,22 +168,26 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 ## Number of candidates (extra experiment)
 
-The assignment fixes 10 candidates but allows choosing it experimentally. Same 200 random starts, C implementation, average objective and average time per run:
+The assignment fixes 10 candidates but allows choosing it experimentally. Same 200 random starts, Python implementation, objective av (min – max) and average time per run (timings come from a separate run, so the 10-candidate time differs slightly from the table above):
 
-| Candidates | TSPA | TSPB | time TSPA |
-|--:|--:|--:|--:|
-| 5 | 86531 | 53894 | 0.41 ms |
-| **10** (reported above) | 80062 | 52560 | 0.78 ms |
-| 15 | 77578 | 52429 | 1.08 ms |
-| 20 | 76423 | 52480 | 1.41 ms |
-| 30 | 76235 | 52437 | 2.27 ms |
-| 199 (all nodes) | 76224 | 52461 | 15.48 ms |
-| baseline (lab 3) | 76225 | 52461 | 3.48 ms |
+| Candidates | TSPA | TSPB | time TSPA | time TSPB |
+|--:|--:|--:|--:|--:|
+| 5 | 86531 (80176 – 91338) | 53894 (51266 – 56792) | 42 ms | 46 ms |
+| **10** (reported above) | 80062 (76007 – 85627) | 52560 (49902 – 55299) | 86 ms | 94 ms |
+| 15 | 77578 (74096 – 81478) | 52429 (50177 – 55464) | 133 ms | 143 ms |
+| 20 | 76423 (74099 – 80271) | 52480 (50265 – 54993) | 183 ms | 189 ms |
+| 30 | 76235 (74248 – 79270) | 52437 (50265 – 55410) | 279 ms | 265 ms |
+| 199 (all nodes) | 76224 (74248 – 79388) | 52461 (50265 – 55410) | 1357 ms | 1294 ms |
+| baseline (lab 3) | 76225 (74248 – 79388) | 52461 (50265 – 55173) | 402 ms | 356 ms |
 
-With all 199 nodes as candidates the method finds the same local optima as the baseline (it differs only in the order of equal moves), which confirms that the candidate moves are generated correctly; it is slower because every edge is reached from both of its ends. About 20 candidates keep the baseline quality at 2.5× the speed.
+<!-- columns -->
+![](figures/candidates_quality_vs_time.svg)
+<!-- column -->
+![](figures/candidates_gap_to_baseline.svg)
+<!-- /columns -->
 
 ## Conclusions
 
-- Candidate moves cost little quality on TSPB (52 560 vs 52 461 on average) but 5 % on TSPA (80 062 vs 76 225), where the improving moves more often need an edge outside the 10 nearest nodes; 20 candidates close that gap (76 423).
-- The best single solution of TSPB so far comes from candidate moves (49 902, below 49 955 of greedy LS in lab 3), while on TSPA the greedy-start local searches of lab 3 stay best (72 971 on average).
-- Evaluating at most 2 000 instead of 14 950 moves per step makes steepest LS about 5× faster (C: 0.68 ms vs 3.48 ms on TSPA, Python: 54 ms vs 255 ms); lab 3's greedy LS and greedy-start methods stay faster only because they evaluate fewer moves in total (greedy LS stops at the first improving move, greedy starts are already near a local optimum), not because their steps are cheaper.
+- Candidate moves cost little quality on TSPB (52 560 vs 52 461 on average) but 5 % on TSPA (80 062 vs 76 225), where the improving moves more often need an edge outside the 10 nearest nodes; 20 candidates close that gap.
+- Evaluating at most 2 000 instead of 14 950 moves per step makes steepest LS 2.7–5.3× faster depending on the language (C: 0.68 ms vs 3.48 ms on TSPA, Python: 54 ms vs 255 ms).
+- The best single solution of TSPB so far comes from candidate moves (49 902, below 49 955 of greedy LS in lab 3).
