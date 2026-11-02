@@ -172,18 +172,70 @@ def nice_axis(top, ticks=8):
     return step, step * math.ceil(top / step)
 
 
+def fit(text, width):
+    """The text cut to at most `width` characters, ending with an ellipsis when it was cut."""
+    return text if len(text) <= width else text[:width - 1].rstrip(" ,") + "…"
+
+
+def pareto_marker(x, y, k, color, muted, r):
+    """Numbered circle of radius r: filled for the compared methods, a faded outline for the muted ones."""
+    size = r + 1 if r < 12 else 13
+    if muted:
+        return (f'<g opacity=".7"><circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="#fff" stroke="{color}" stroke-width="1.5"/>'
+                f'<text x="{x:.1f}" y="{y + size * .36:.1f}" text-anchor="middle" fill="{color}" font-size="{size}" font-weight="bold">{k}</text></g>')
+    return (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{color}" stroke="#fff" stroke-width="2"/>'
+            f'<text x="{x:.1f}" y="{y + size * .38:.1f}" text-anchor="middle" fill="#fff" font-size="{size}" font-weight="bold">{k}</text>')
+
+
+def pareto_legend(points, front, x, y):
+    """(svg, height) of the legend, numbered in the fixed lab order.
+    Compared methods get one large row each; consecutive muted methods (context only) a compact two-column grid
+    with one-line short names, filled down the left column first."""
+    out, start, column = [], y, 228
+    groups = []  # [(muted, [(number, point)])], consecutive points of the same kind
+    for k, p in enumerate(points, 1):
+        if not groups or groups[-1][0] != p[3]:
+            groups.append((p[3], []))
+        groups[-1][1].append((k, p))
+    color = lambda p: TOUR_COLOR if p in front else "#8b92a5"
+    for g, (muted, members) in enumerate(groups):
+        y += 12 if g else 0  # gap between the compared and the muted methods
+        if not muted:
+            for k, p in members:
+                weight = ' font-weight="bold"' if p in front else ""
+                out.append(pareto_marker(x, y + 10, k, color(p), False, 12) +
+                           f'<text x="{x + 22}" y="{y + 15}" fill="#1c2230"{weight}>{html.escape(p[0])}</text>')
+                y += 32
+            continue
+        half = (len(members) + 1) // 2
+        for c, column_members in enumerate((members[:half], members[half:])):  # filled down the left column first
+            for row, (k, p) in enumerate(column_members):
+                cx, cy = x + c * column, y + row * 19
+                out.append(pareto_marker(cx, cy + 7, k, color(p), True, 8) +
+                           f'<text x="{cx + 14}" y="{cy + 11}" fill="#8b92a5" font-size="11">{html.escape(fit(p[4], 36))}</text>')
+        y += half * 19
+    return "".join(out), y - start
+
+
 def svg_pareto(points, lang_name):
-    """Average objective against average run time (both minimised, linear axes from 0, objective axis flipped so the best is at the top).
-    points: [(label, ns, objective)]. The Pareto front (no other method is both faster and better) is joined by a step line."""
+    """Average objective against average run time (both minimised, linear axes; time from 0, objective fitted to the scores and flipped so the best is at the top).
+    points: [(label, ns, objective, muted, short label)] in the fixed lab order, so a method keeps its number in every report.
+    Muted points (labs shown only for context) are drawn smaller and faded, and get a compact legend.
+    The Pareto front (no other method is both faster and better) is joined by a step line."""
     w, h, left, right, top, bottom = 1200, 560, 90, 480, 30, 70
-    t_unit, t_name = next((u, n) for u, n in ((1e9, "s"), (1e6, "ms"), (1e3, "µs"), (1, "ns")) if max(t for _, t, _ in points) >= u or u == 1)
-    t_step, t_max = nice_axis(max(t for _, t, _ in points) / t_unit)
-    o_step, o_max = nice_axis(max(o for _, _, o in points))
-    t_max *= t_unit
-    sx = lambda t: left + t / t_max * (w - left - right)
-    sy = lambda o: top + o / o_max * (h - top - bottom)  # flipped: the best (lowest) objective is at the top
     dominated = lambda a: any(b[1] <= a[1] and b[2] <= a[2] and (b[1], b[2]) != (a[1], a[2]) for b in points)
     front = sorted((p for p in points if not dominated(p)), key=lambda p: p[1])
+    legend, legend_h = pareto_legend(points, front, w - right + 36, top)
+    h = max(h, top + legend_h + 10)  # taller plot when the legend would not fit
+    t_unit, t_name = 1e6, "ms"  # running times are always shown in milliseconds
+    t_step, t_max = nice_axis(max(p[1] for p in points) / t_unit)
+    o_lo, o_hi = min(p[2] for p in points), max(p[2] for p in points)
+    o_step, _ = nice_axis(max(o_hi - o_lo, 1))  # the objective axis covers only the range of the scores, so they are not squeezed together
+    o_min = o_step * math.floor(o_lo / o_step)
+    o_max = o_step * math.ceil(o_hi / o_step)
+    t_max *= t_unit
+    sx = lambda t: left + t / t_max * (w - left - right)
+    sy = lambda o: top + (o - o_min) / (o_max - o_min) * (h - top - bottom)  # flipped: the best (lowest) objective is at the top
     plot_w, plot_h = w - left - right, h - top - bottom
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}" font-family="Helvetica, Arial, sans-serif" font-size="15">',
            f'<rect width="{w}" height="{h}" fill="#fff"/>',
@@ -192,41 +244,34 @@ def svg_pareto(points, lang_name):
         x = sx(k * t_step * t_unit)
         out.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{h - bottom}" stroke="#e1e5ee"/>'
                    f'<text x="{x:.1f}" y="{h - bottom + 24}" text-anchor="middle" fill="#4a5163">{k * t_step:g}</text>')
-    for k in range(round(o_max / o_step) + 1):
-        y = sy(k * o_step)
+    for k in range(round((o_max - o_min) / o_step) + 1):
+        y = sy(o_min + k * o_step)
         out.append(f'<line x1="{left}" y1="{y:.1f}" x2="{w - right}" y2="{y:.1f}" stroke="#e1e5ee"/>'
-                   f'<text x="{left - 10}" y="{y + 5:.1f}" text-anchor="end" fill="#4a5163">{k * o_step:g}</text>')
+                   f'<text x="{left - 10}" y="{y + 5:.1f}" text-anchor="end" fill="#4a5163">{o_min + k * o_step:g}</text>')
     out.append(f'<rect x="{left}" y="{top}" width="{plot_w}" height="{plot_h}" fill="none" stroke="#9aa1b3"/>')
     out.append(f'<text x="{left + plot_w / 2}" y="{h - 14}" text-anchor="middle" font-size="17" fill="#1c2230">average running time ({lang_name.lower()}), {t_name}</text>')
     out.append(f'<text transform="translate(22,{top + plot_h / 2}) rotate(-90)" text-anchor="middle" font-size="17" fill="#1c2230">score</text>')
     steps = f"M{sx(front[0][1]):.1f},{sy(front[0][2]):.1f}"
-    for _, t, o in front[1:]:
-        steps += f"H{sx(t):.1f}V{sy(o):.1f}"
+    for p in front[1:]:
+        steps += f"H{sx(p[1]):.1f}V{sy(p[2]):.1f}"
     steps += f"H{w - right}"  # the best objective found so far holds for any longer running time
     out.append(f'<path d="{steps}" fill="none" stroke="{TOUR_COLOR}" stroke-width="2" stroke-dasharray="6 4" opacity=".7"/>')
-    for k, (label, t, o) in enumerate(points, 1):  # numbered points (names would overlap), the legend on the right gives the names
-        on_front = (label, t, o) in front
-        color = TOUR_COLOR if on_front else "#8b92a5"
-        ly = top + 20 + (k - 1) * 32
-        weight = ' font-weight="bold"' if on_front else ""
-        out.append(f'<circle cx="{sx(t):.1f}" cy="{sy(o):.1f}" r="12" fill="{color}" stroke="#fff" stroke-width="2"/>'
-                   f'<text x="{sx(t):.1f}" y="{sy(o) + 5:.1f}" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">{k}</text>'
-                   f'<circle cx="{w - right + 36}" cy="{ly - 5}" r="12" fill="{color}"/>'
-                   f'<text x="{w - right + 36}" y="{ly}" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">{k}</text>'
-                   f'<text x="{w - right + 58}" y="{ly}" fill="#1c2230"{weight}>{html.escape(label)}</text>')
+    out.append(legend)
+    # every badge sits at its exact position; the Pareto front is larger and drawn on top, so the others may be covered
+    radii = [(10 if p[3] else 12) if p in front else (8 if p[3] else 9) for p in points]
+    order = sorted(range(len(points)), key=lambda i: (points[i] in front, not points[i][3]))  # front last, compared above muted
+    for i in order:
+        p = points[i]
+        out.append(pareto_marker(sx(p[1]), sy(p[2]), i + 1, TOUR_COLOR if p in front else "#8b92a5", p[3], radii[i]))
     out.append("</svg>")
     return "".join(out)
 
 
 def fmt_time(ns):
-    """Same units as the viewer's fmtTime."""
-    if ns < 1e3:
-        return f"{ns:.0f} ns"
-    if ns < 1e6:
-        return f"{ns / 1e3:.1f} µs"
-    if ns < 1e9:
-        return f"{ns / 1e6:.2f} ms"
-    return f"{ns / 1e9:.2f} s"
+    """Same as the viewer's fmtTime: always milliseconds, more decimals for short times so they do not round to 0."""
+    ms = ns / 1e6
+    decimals = 4 if ms < 1 else 2 if ms < 100 else 1
+    return f"{ms:.{decimals}f} ms"
 
 
 # ---------------------------------------------------------------- generated blocks
@@ -244,16 +289,26 @@ def entries_of(labs):
     return [(l, m, m["name"]) for l in labs for m in l["methods"]]
 
 
-def time_section(inst, entries, by_lab, files_dir):
-    """Markdown for one instance: table of the average time per run, methods by language, and the time/quality Pareto plot."""
+PARETO_HIDDEN = {"random"}  # far worse than every other method: it would stretch the objective axis and squeeze the rest
+
+
+def time_section(inst, entries, pareto_entries, by_lab, files_dir):
+    """Markdown for one instance: table of the average time per run, methods by language, and the time/quality Pareto plot.
+    The table covers `entries`, the Pareto plot covers `pareto_entries`."""
     rows = []  # (method name, {lang: avg ns})
-    pareto = []  # (method name, avg ns, avg objective), one language for all methods
     for lab, m, mname in entries:
         by = {lang: r["stats"]["ns_avg"] for lang, r in by_lab[lab["id"]].get(m["id"], {}).items()}
         if by:
             rows.append((mname, by))
-            r = pick(by_lab[lab["id"]][m["id"]])
-            pareto.append((mname, r["stats"]["ns_avg"], r["stats"]["obj_avg"], r["lang"]))
+    compared = {(lab["id"], m["id"]) for lab, m, _ in entries}
+    pareto = []  # (method name, avg ns, avg objective, muted, short name, lang), one language for all methods
+    for lab, m, mname in pareto_entries:
+        if m["id"] in PARETO_HIDDEN:
+            continue
+        r = pick(by_lab[lab["id"]].get(m["id"], {}))
+        if r:  # methods only from earlier labs (not compared) are muted: shown for context, not in focus
+            pareto.append((mname, r["stats"]["ns_avg"], r["stats"]["obj_avg"], (lab["id"], m["id"]) not in compared,
+                           m.get("short", mname), r["lang"]))
     if not rows:
         return f"### Instance {inst}\n\nno benchmark results\n"
     langs = [l for l in LANG_ORDER if any(l in by for _, by in rows)]
@@ -264,9 +319,36 @@ def time_section(inst, entries, by_lab, files_dir):
             "" if l not in by else f"**{fmt_time(by[l])}**" if by[l] == fastest else fmt_time(by[l]) for l in langs) + " |")
     name = f"{inst}_pareto.svg"
     with open(os.path.join(files_dir, name), "w") as f:
-        f.write(svg_pareto([(n, t, o) for n, t, o, _ in pareto], LANG_NAMES[pareto[0][3]]))
+        f.write(svg_pareto([p[:5] for p in pareto], LANG_NAMES[pareto[0][5]]))
     caption = f"Pareto plot, instance {inst}"
     return f"### Instance {inst}\n\n" + "\n".join(table) + f"\n\n### Pareto plot (Instance {inst})\n\n![{caption}]({FILES_DIR}/{name})\n"
+
+
+def pareto_labs_of(own, labs):
+    """The labs on the Pareto plot: the compared labs plus every lab before the report's own lab, so the plot always shows the progress so far."""
+    sys.path.insert(0, TOOL)
+    import server  # imported here: server imports this module
+    previous = [l for l in server.find_labs() if l["num"] < own["num"]]
+    chosen = {l["id"]: l for l in previous + labs}
+    return sorted(chosen.values(), key=lambda l: l["num"])
+
+
+def results_table(instances, stats):
+    """Markdown lines of one table: a row per method, a column per instance, each cell "av (min – max)".
+    The objective is minimised, so in each instance the lowest av, min and max are bold (ties are all bold)."""
+    table = ["| Method | " + " | ".join(instances) + " |", "|---|" + ":-:|" * len(instances)]
+    best = {inst: [min((v[k] for _, v in stats[inst] if v), default=None) for k in range(3)] for inst in instances}
+    for i, (mname, _) in enumerate(stats[instances[0]]):
+        cells = []
+        for inst in instances:
+            vals = stats[inst][i][1]
+            if vals is None:
+                cells.append("not run")
+                continue
+            av, lo, hi = (f"**{v}**" if v == best[inst][k] else str(v) for k, v in enumerate(vals))
+            cells.append(f"{av} ({lo} – {hi})")
+        table.append(f"| {mname} | " + " | ".join(cells) + " |")
+    return table
 
 
 def build_blocks(labs, instances, out_dir, own):
@@ -274,9 +356,12 @@ def build_blocks(labs, instances, out_dir, own):
 
     `labs` are the labs whose solutions are compared (the report's own lab is normally one of them).
     `own` is the report's lab: the best solutions and source code sections cover only that lab.
+    The Pareto plot also includes every lab before `own` (see pareto_labs_of).
     """
     warnings = []
     entries = entries_of(labs)
+    pareto_labs = pareto_labs_of(own, labs)
+    pareto_entries = entries_of(pareto_labs)
     res, times, sols = [], [], []
     files_dir = os.path.join(out_dir, FILES_DIR)
     os.makedirs(files_dir, exist_ok=True)
@@ -284,14 +369,14 @@ def build_blocks(labs, instances, out_dir, own):
         os.remove(old)
 
     all_checked, all_same, multi_lang = True, True, False
+    stats = {}  # instance -> rows of the results table
     for inst in instances:
-        by_lab = {l["id"]: load_results(l["id"], inst) for l in labs}
+        by_lab = {l["id"]: load_results(l["id"], inst) for l in pareto_labs}
         nodes = load_nodes(inst)
-        res.append(f"### Instance {inst}\n\n| Method | Min | Max | Avg |\n|---|--:|--:|--:|")
-        plots = []  # the visualisations of this instance, shown under its results table
-        times.append(time_section(inst, entries, by_lab, files_dir))
+        plots = []  # the visualisations of this instance, shown under the results table
+        times.append(time_section(inst, entries, pareto_entries, by_lab, files_dir))
         sols.append(f"### Instance {inst}\n")
-        rows = []  # (method name, [min, max, avg]) or (method name, None) when not run
+        rows = stats[inst] = []  # (method name, [avg, min, max]) or (method name, None) when not run
         for lab, m, mname in entries:
             by = by_lab[lab["id"]]
             r = pick(by.get(m["id"], {}))
@@ -306,29 +391,21 @@ def build_blocks(labs, instances, out_dir, own):
                                 for x in langs.values())
             all_checked &= bool(r["checked"])
             s, b = r["stats"], r["best"]
-            rows.append((mname, [s["obj_min"], s["obj_max"], round(s["obj_avg"])]))
+            rows.append((mname, [round(s["obj_avg"]), s["obj_min"], s["obj_max"]]))
             name = f"{inst}_{lab['id']}_{m['id']}.svg"
             with open(os.path.join(files_dir, name), "w") as f:
                 f.write(svg_plot(nodes, b["tour"]))
             plots.append(f"![{mname}<br>**{b['obj']}** (length {b['len']} + cost {b['cost']})]({FILES_DIR}/{name})")
             if lab["id"] == own["id"]:
                 sols.append(f"**{mname}**\n{', '.join(map(str, b['tour']))}\n")
-        # objective is minimised, so the lowest value in each column is the best (ties are all bold)
-        best = [min((v[k] for _, v in rows if v), default=None) for k in range(3)]
-        for mname, vals in rows:
-            if vals is None:
-                res.append(f"| {mname} | not run | | |")
-                continue
-            cells = [f"**{v}**" if v == best[k] else str(v) for k, v in enumerate(vals)]
-            res.append(f"| {mname} | {' | '.join(cells)} |")
-        res.append("")
         res.append(f"### Visualisation (Instance {inst})\n")
         res.extend(plots)
         res.append("")
 
+    res = results_table(instances, stats) + [""] + res
     n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for l in labs for by in [load_results(l["id"], i)]
                                for langs in by.values() for r in langs.values()}))
-    summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method. The best value in each column is in bold.\n"
+    summary = (f"Objective = cycle length + sum of node costs, over {n_runs or '0'} runs per method. Each cell is av (min – max); the best value of each kind per instance is in bold.\n"
                f"All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **{'yes' if all_checked else 'NO'}**.")
     if multi_lang:
         summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
@@ -502,7 +579,7 @@ h1{{font-size:24px;margin:0 0 .3em}}h2{{font-size:18px;border-bottom:1px solid #
 .pb,.pbk{{break-before:page}}h3{{font-size:15px;margin:1.3em 0 .4em}}h2,h3{{break-after:avoid}}
 table{{break-inside:avoid;border-collapse:collapse;margin:.5em 0}}td,th{{border:1px solid #ccc;padding:4px 9px}}th{{background:#f3f3f3;text-align:left}}
 pre{{background:#f5f5f5;padding:9px;font-size:11px;white-space:pre-wrap;break-inside:avoid}}code{{background:#f0f0f0;padding:0 3px}}
-.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}}.grid.wide{{grid-template-columns:1fr;width:95%;margin:0}}.grid.wide figcaption{{display:none}}.grid.one{{grid-template-columns:1fr;width:25%;margin:0 auto}}figure{{margin:0;text-align:center;font-size:9px;break-inside:avoid}}
+.keep{{break-inside:avoid}}.grid{{display:grid;grid-template-columns:repeat(4,180px);gap:6px;width:100%}}.grid.wide{{grid-template-columns:1fr;width:95%;margin:0}}.grid.wide figcaption{{display:none}}.grid.one{{grid-template-columns:1fr;width:25%;margin:0 auto}}figure{{margin:0;text-align:center;font-size:9px;break-inside:avoid}}
 img{{width:100%;border:1px solid #ddd}}.cols{{display:flex;gap:18px;align-items:flex-start;break-inside:avoid}}.cols>div{{flex:1 1 0;min-width:0}}.cols>div+div{{flex:0 0 38%}}.cols .grid.one{{width:100%}}.cols img{{border:none}}p{{margin:.5em 0;overflow-wrap:anywhere}}a{{color:#1a55a5}}
 </style></head><body>{body}</body></html>"""
 
