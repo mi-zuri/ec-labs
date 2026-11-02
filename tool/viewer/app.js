@@ -34,6 +34,7 @@ const S = {
   controller: null,
   batch: null,
   included: [],     // ids of the extra labs compared with the selected one
+  excluded: [],     // "lab/method" keys of the algorithms unticked by the user (every algorithm is compared by default)
 };
 
 // ------------------------------------------------------------------ helpers
@@ -182,7 +183,7 @@ async function init() {
 }
 
 function selectLab(id, methodId) {
-  if (S.lab && S.lab.id !== id) S.included = []; // changing the lab starts again with that lab only
+  if (S.lab && S.lab.id !== id) S.included = S.excluded = []; // changing the lab starts again with that lab only
   S.lab = S.catalog.labs.find((l) => l.id === id);
   $("lab").value = $("cmp-lab").value = id;
   store("lab", id);
@@ -197,22 +198,37 @@ function includedLabs() {
   return S.catalog.labs.filter((l) => l.id === S.lab.id || S.included.includes(l.id));
 }
 
-// Every solution to compare: {lab, method, name}. With several labs the name says where it comes from.
+// Every solution to compare: {lab, method, name}, without the algorithms unticked by the user.
+// With several labs the name says where it comes from.
 function compareEntries() {
   const labs = includedLabs();
-  return labs.flatMap((lab) => lab.methods.map((method) => ({
-    lab, method, name: labs.length > 1 ? `Lab ${lab.num}: ${method.name}` : method.name,
-  })));
+  return labs.flatMap((lab) => lab.methods
+    .filter((method) => !S.excluded.includes(lab.id + "/" + method.id))
+    .map((method) => ({ lab, method, name: labs.length > 1 ? `Lab ${lab.num}: ${method.name}` : method.name })));
 }
 
 function renderIncludeChecks() {
   const on = includedLabs().map((l) => l.id);
   $("cmp-include").innerHTML = S.catalog.labs.map((l) =>
     `<label title="${esc(l.title)}"><input type="checkbox" value="${l.id}"${on.includes(l.id) ? " checked" : ""}${l.id === S.lab.id ? " disabled" : ""}> Lab ${l.num} · ${esc(l.title)}</label>`).join("");
+  // one row of algorithm checkboxes per extra lab (the selected lab's algorithms are always compared)
+  const extra = includedLabs().filter((l) => l.id !== S.lab.id);
+  $("cmp-methods-head").hidden = !extra.length;
+  $("cmp-methods").innerHTML = extra.map((lab) => `<div class="method-row">
+    <span class="method-lab">Lab ${lab.num}</span>
+    <div class="checks">${lab.methods.map((m) => {
+      const key = lab.id + "/" + m.id;
+      return `<label><input type="checkbox" value="${key}"${S.excluded.includes(key) ? "" : " checked"}> ${esc(m.name)}</label>`;
+    }).join("")}</div></div>`).join("");
 }
 
 function onIncludeChange() {
   S.included = [...$("cmp-include").querySelectorAll("input:checked:not(:disabled)")].map((c) => c.value);
+  loadCompare();
+}
+
+function onMethodChange() {
+  S.excluded = [...$("cmp-methods").querySelectorAll("input:not(:checked)")].map((c) => c.value);
   loadCompare();
 }
 
@@ -835,7 +851,7 @@ async function makeReport() {
   btn.disabled = true;
   msg.textContent = "Generating…";
   try {
-    const res = await fetch(`/api/report?lab=${S.lab.id}&include=${includedLabs().map((l) => l.id).join(",")}`, { method: "POST" });
+    const res = await fetch(`/api/report?lab=${S.lab.id}&include=${includedLabs().map((l) => l.id).join(",")}&exclude=${S.excluded.join(",")}`, { method: "POST" });
     const r = await res.json();
     if (r.error) throw new Error(r.error);
     msg.textContent = (r.created ? "Report created. " : "Report regenerated. ") + (r.warnings.length ? "Warnings: " + r.warnings.join("; ") : "");
@@ -881,6 +897,7 @@ function bindEvents() {
   $("lab").addEventListener("change", (e) => selectLab(e.target.value));
   $("cmp-lab").addEventListener("change", (e) => selectLab(e.target.value));
   $("cmp-include").addEventListener("change", onIncludeChange);
+  $("cmp-methods").addEventListener("change", onMethodChange);
   $("instance").addEventListener("change", (e) => selectInstance(e.target.value));
   $("cmp-instance").addEventListener("change", (e) => selectInstance(e.target.value));
   $("method").addEventListener("change", (e) => selectMethod(e.target.value));

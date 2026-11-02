@@ -284,9 +284,9 @@ def block(name, body):
     return f"<!-- auto:{name} (generated: edits between these markers are overwritten) -->\n{body.strip()}\n<!-- /auto:{name} -->"
 
 
-def entries_of(labs):
-    """(lab, method, display name) for every solution to compare."""
-    return [(l, m, m["name"]) for l in labs for m in l["methods"]]
+def entries_of(labs, excluded=()):
+    """(lab, method, display name) for every solution to compare, without the `excluded` "lab/method" keys."""
+    return [(l, m, m["name"]) for l in labs for m in l["methods"] if f"{l['id']}/{m['id']}" not in excluded]
 
 
 PARETO_HIDDEN = {"random"}  # far worse than every other method: it would stretch the objective axis and squeeze the rest
@@ -351,15 +351,16 @@ def results_table(instances, stats):
     return table
 
 
-def build_blocks(labs, instances, out_dir, own):
+def build_blocks(labs, instances, out_dir, own, excluded=()):
     """Return ({block name: markdown}, [warnings]). Also writes the plot SVGs.
 
     `labs` are the labs whose solutions are compared (the report's own lab is normally one of them).
     `own` is the report's lab: the best solutions and source code sections cover only that lab.
-    The Pareto plot also includes every lab before `own` (see pareto_labs_of).
+    The Pareto plot also includes every lab before `own` (see pareto_labs_of); `excluded` ("lab/method" keys)
+    are left out of the comparison, so on the Pareto plot they are only muted context.
     """
     warnings = []
-    entries = entries_of(labs)
+    entries = entries_of(labs, excluded)
     pareto_labs = pareto_labs_of(own, labs)
     pareto_entries = entries_of(pareto_labs)
     res, times, sols = [], [], []
@@ -434,7 +435,7 @@ def first_text(lab):
     return read_text(TEMPLATE).replace("{{title}}", "Lab %d - %s" % (lab["num"], lab["title"]))
 
 
-def write_markdown(lab, instances, labs):
+def write_markdown(lab, instances, labs, excluded=()):
     """Create or refresh Report.md. Returns (path, created, warnings)."""
     out_dir = report_dir(lab)
     os.makedirs(out_dir, exist_ok=True)
@@ -442,7 +443,7 @@ def write_markdown(lab, instances, labs):
     created = not os.path.exists(md_path)
     text = first_text(lab) if created else read_text(md_path)
     text = re.sub(r"## Visualisation of the best solutions\s*<!-- auto:plots.*?<!-- /auto:plots -->\s*", "", text, flags=re.S)  # old separate section: the plots now live under Results
-    blocks, warnings = build_blocks(labs, instances, out_dir, lab)
+    blocks, warnings = build_blocks(labs, instances, out_dir, lab, excluded)
 
     seen = set()
 
@@ -631,9 +632,9 @@ def status(lab):
             "pdf_mtime": os.path.getmtime(pdf) if os.path.exists(pdf) else None}
 
 
-def generate(lab, instances, labs=None):
-    """Build the report of `lab`, comparing the solutions of `labs` (default: just `lab`)."""
-    md_path, created, warnings = write_markdown(lab, instances, labs or [lab])
+def generate(lab, instances, labs=None, excluded=()):
+    """Build the report of `lab`, comparing the solutions of `labs` (default: just `lab`) except the `excluded` "lab/method" keys."""
+    md_path, created, warnings = write_markdown(lab, instances, labs or [lab], excluded)
     pdf_path, error = write_pdf(report_dir(lab), md_path, pdf_name(lab))
     if error:
         warnings.append(error)

@@ -210,3 +210,7 @@ button.chip-link { font: inherit; font-size: 13px; cursor: pointer; }
 
 .checks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .checks label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.sub-head { margin-top: 12px; }
+.sub-head[hidden] { display: none; }
+.method-row { display: flex; align-items: baseline; gap: 12px; padding: 3px 0; }
+.method-lab { flex: none; width: 48px; color: var(--muted); font-size: 13px; }

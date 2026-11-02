@@ -268,8 +268,9 @@ class Handler(BaseHTTPRequestHandler):
                 included = [known[i] for i in q.get("include", lab["id"]).split(",") if i in known]
                 if not included:
                     return self.send_json({"error": "select at least one lab to compare"}, 400)
+                excluded = set(filter(None, q.get("exclude", "").split(",")))  # "lab/method" keys left out of the comparison
                 with REPORT_LOCK:
-                    return self.send_json(report.generate(lab, find_instances(), included))
+                    return self.send_json(report.generate(lab, find_instances(), included, excluded))
             if url.path == "/api/report/md":
                 lab = next((l for l in find_labs() if l["id"] == q.get("lab")), None)
                 if not lab:
