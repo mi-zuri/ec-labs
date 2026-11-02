@@ -21,7 +21,9 @@ const S = {
   frames: [],       // {tour, run?, obj?}
   cursor: -1,
   playing: false,
-  speed: 20,
+  speed: "10",      // frames/s, "Infinity" (live), or "<k>xmax" (k × solver's frame rate)
+  firstFrameAt: 0,  // arrival times of the first and last frame, to measure the solver's frame rate
+  lastFrameAt: 0,
   acc: 0,
   lastTs: 0,
   dirty: true,
@@ -43,11 +45,11 @@ const langColor = (l) => getComputedStyle(document.documentElement).getPropertyV
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 function fmtTime(ns) {
+  // always milliseconds; more decimals for short times so they do not round to 0
   if (ns == null) return "–";
-  if (ns < 1e3) return ns.toFixed(0) + " ns";
-  if (ns < 1e6) return (ns / 1e3).toFixed(1) + " µs";
-  if (ns < 1e9) return (ns / 1e6).toFixed(2) + " ms";
-  return (ns / 1e9).toFixed(2) + " s";
+  const ms = ns / 1e6;
+  const decimals = ms < 1 ? 4 : ms < 100 ? 2 : 1;
+  return ms.toFixed(decimals) + " ms";
 }
 
 function store(key, value) {
@@ -165,8 +167,9 @@ async function init() {
 
   S.lang = recall("lang") || "c";
   S.mode = recall("mode") || "trace";
-  S.speed = Number(recall("speed") || 20);
-  $("pb-speed").value = String(S.speed);
+  const speedOptions = [...$("pb-speed").options].map((o) => o.value);
+  S.speed = speedOptions.includes(recall("speed")) ? recall("speed") : "10";
+  $("pb-speed").value = S.speed;
 
   const labId = recall("lab");
   selectLab(S.catalog.labs.find((l) => l.id === labId) ? labId : S.catalog.labs.at(-1).id, recall("method"));
@@ -315,6 +318,24 @@ async function run() {
   }
 }
 
+function addFrame(frame) {
+  const now = performance.now();
+  if (!S.frames.length) S.firstFrameAt = now;
+  S.lastFrameAt = now;
+  S.frames.push(frame);
+}
+
+// How many frames per second the solver produced so far ("Max" speed follows it live).
+function solverFrameRate() {
+  const seconds = (S.lastFrameAt - S.firstFrameAt) / 1000;
+  return seconds > 0 ? (S.frames.length - 1) / seconds : Infinity;
+}
+
+function playbackRate() {
+  if (S.speed.endsWith("xmax")) return parseFloat(S.speed) * solverFrameRate();
+  return Number(S.speed);
+}
+
 function onMessage(msg) {
   const ses = S.session;
   switch (msg.t) {
@@ -332,13 +353,13 @@ function onMessage(msg) {
       setStatus(`Running ${ses.method.name} · ${langName(ses.lang)} · ${msg.runs} run${msg.runs > 1 ? "s" : ""}`, "busy");
       break;
     case "step":
-      S.frames.push({ tour: msg.tour });
+      addFrame({ tour: msg.tour });
       break;
     case "run_end":
       ses.runs.push(msg);
       if (!ses.best || msg.obj < ses.best.obj) ses.best = msg;
-      if (ses.mode === "bench") S.frames.push({ tour: msg.tour, run: msg.run, obj: msg.obj });
-      else if (!S.frames.length) S.frames.push({ tour: msg.tour });
+      if (ses.mode === "bench") addFrame({ tour: msg.tour, run: msg.run, obj: msg.obj });
+      else if (!S.frames.length) addFrame({ tour: msg.tour });
       scheduleStats();
       break;
     case "done":
@@ -424,10 +445,11 @@ function tick(ts) {
   S.lastTs = ts;
   if (S.playing && S.frames.length) {
     const last = S.frames.length - 1;
-    if (S.speed === Infinity) {
+    const rate = playbackRate();
+    if (rate === Infinity) {
       if (S.cursor !== last) { S.cursor = last; S.dirty = true; }
     } else {
-      S.acc += (dt * S.speed) / 1000;
+      S.acc += (dt * rate) / 1000;
       while (S.acc >= 1 && S.cursor < last) { S.cursor++; S.acc -= 1; S.dirty = true; }
       if (S.cursor >= last) S.acc = Math.min(S.acc, 1);
     }
@@ -890,7 +912,7 @@ function bindEvents() {
   $("pb-last").addEventListener("click", () => seek(S.frames.length - 1));
   $("pb-play").addEventListener("click", togglePlay);
   $("pb-range").addEventListener("input", (e) => seek(Number(e.target.value)));
-  $("pb-speed").addEventListener("change", (e) => { S.speed = Number(e.target.value); store("speed", e.target.value); });
+  $("pb-speed").addEventListener("change", (e) => { S.speed = e.target.value; store("speed", e.target.value); });
 
   document.addEventListener("keydown", (e) => {
     if ($("tab-run").hidden || e.target.matches("input, select, textarea")) return;
