@@ -4,35 +4,37 @@ Author: Michał Żurawski 160252
 
 ## Description of the problem
 
-Each instance contains nodes with coordinates (x, y) and a cost. Select exactly half of the nodes (rounded up) and connect them into a closed cycle. Minimise **cycle length + sum of the costs of the selected nodes**. Distances are Euclidean, rounded to the nearest integer.
+Each instance has n = 200 nodes with coordinates (x, y) and a cost. Select exactly **half of the nodes** (k = 100) and connect them into a **closed cycle** that minimises **cycle length + sum of node costs**. Distances are Euclidean, rounded to integers.
 
 ## Algorithms
 
-Eight local search methods, 200 runs each: steepest or greedy × nodes or edges exchange inside the tour × random start (run i uses seed 42 + i) or greedy start (lab 2's best heuristic, greedy cycle with 2-regret + best change, run i starts from node i). Instead of building a tour, they take a complete one and keep improving it with small moves. The greedy start uses the heuristic with the best TSPA average in lab 2 (73 350); on TSPB the nearest neighbor variant with 2-regret + best change was better (55 698 vs 57 751), so the TSPB greedy starts are not the best available ones.
+Eight **local search** methods: **steepest or greedy** × **nodes or edges exchange** inside the tour × **random start** (run i uses seed 42 + i) or **greedy start** (lab 2's best heuristic, greedy cycle with 2-regret + best change, run i starts from node i). Instead of building a tour, they take a complete one and keep improving it with **small moves**.
 
 ### Intuition
 
-A construction heuristic never takes a decision back: edges may end up crossing, or a cheap unused node could replace an expensive one. Local search takes a complete tour, applies a small change that lowers the objective, and repeats until no change helps (a local optimum). Example: tour A → C → B → D on a 10 × 10 square has two crossing diagonals (length 48); replacing edges (A, C), (B, D) with (A, B), (C, D) gives Δ = 10 + 10 − 14 − 14 = −8, a tour of 40 that construction would never revisit. **Steepest** applies the best move of the whole neighborhood, **greedy** the first improving one found in random order (more steps, each much cheaper).
+**Problem:** a construction heuristic never takes a decision back: edges may end up crossing, or a cheap unused node could replace an expensive one.
+
+**Idea:** take a complete tour and keep applying small changes that lower the objective until none helps: swap a tour node for an unused one, and swap two tour nodes or reverse a part of the tour; this makes random tours 3.5–4 times better. **Steepest** applies the best change of the whole neighborhood, **greedy** the first improving one in random order.
 
 ### Core calculations
 
 <!-- columns -->
-Δ = change of the objective, from the changed edges and costs only; p(x), s(x) = predecessor, successor of x.
+For every move we calculate **Δ = the change of the objective**, from the changed edges and costs only; p(x), s(x) = predecessor, successor of x.
 
-Inter-route, selected u ↔ unselected v:
+**Inter-route**, selected u ↔ unselected v:
 
 `Δ = c(v) − c(u) + d(p,v) + d(v,s) − d(p,u) − d(u,s)`
 
-Nodes exchange a ↔ b (for neighbours only the 2 outer edges change):
+**Nodes exchange** a ↔ b (for neighbours only the 2 outer edges change):
 
 `Δ = d(pa,b) + d(b,sa) + d(pb,a) + d(a,sb)`
 `  − d(pa,a) − d(a,sa) − d(pb,b) − d(b,sb)`
 
-Edges exchange (a,b), (c,d) → (a,c), (b,d), path b … c reversed:
+**Edges exchange** (a,b), (c,d) → (a,c), (b,d), path b … c reversed:
 
 `Δ = d(a,c) + d(b,d) − d(a,b) − d(c,d)`
 
-A move is applied only if Δ < 0; 14 950 moves per step (n = 200, k = 100).
+A move is applied **only if Δ < 0**; 14 950 moves per step (n = 200, k = 100).
 
 | Method | picks | intra-route |
 |---|---|---|
@@ -43,6 +45,28 @@ A move is applied only if Δ < 0; 14 950 moves per step (n = 200, k = 100).
 <!-- /columns -->
 
 <!-- pagebreak -->
+### Complexity
+
+| Method | Complexity per step | Δ per run |
+|---|---|--:|
+| Steepest LS, nodes exchange, random start | O(nk) | 2 350 663 |
+| Steepest LS, edges exchange, random start | O(nk) | 2 003 300 |
+| Greedy LS, nodes exchange, random start | ≤ O(nk) | 141 558 |
+| Greedy LS, edges exchange, random start | ≤ O(nk) | 96 941 |
+| Steepest LS, nodes exchange, greedy start | O(nk), start O(nk²) | 726 309 |
+| Steepest LS, edges exchange, greedy start | O(nk), start O(nk²) | 726 159 |
+| Greedy LS, nodes exchange, greedy start | ≤ O(nk), start O(nk²) | 694 710 |
+| Greedy LS, edges exchange, greedy start | ≤ O(nk), start O(nk²) | 694 983 |
+
+Δ per run is the TSPA average over 200 runs.
+
+#### Explanation
+
+- **Steepest LS:** every step computes the Δ of every move, k(n − k) inter-route + k(k − 1)/2 intra-route ≤ nk → **O(nk)** per step: `k(n − k) + k(k − 1)/2 = 14 950`; 134–157 steps per run from random starts.
+- **Greedy LS:** a step computes Δ in random move order until the first improving move, at most all 14 950 → **≤ O(nk)** per step; on average 230–340 Δ per step and about 415 steps per run from random starts.
+- **Greedy start:** built once by lab 2's greedy cycle with 2-regret + best change → **start O(nk²)**: `661 650` Δ, counted in Δ per run. That tour is almost a local optimum, so LS then takes only 3–5 steps (33 000–65 000 Δ).
+- So **greedy LS computes 17–21× fewer Δ than steepest LS** from random starts, and from greedy starts the construction costs **10–20× more Δ than the local search** itself.
+
 ### Pseudocode
 
 Simplified from `python/solver.py`. All eight methods run `local_search`; they differ in the starting tour (`random_start` / `greedy_start`), in `intra_kind` (`SWAP_NODES` / `SWAP_EDGES`) and in the function that picks the move.
@@ -87,8 +111,8 @@ def apply_move(tour, unselected, move):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method. Each cell is av (min – max); the best value of each kind per instance is in bold.
-All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
+Objective = cycle length + node costs, 200 runs per method. Cells: av (min – max), best of each per instance in bold.
+All best solutions were checked with the solution checker: **yes**.
 Results are identical in all implemented languages: **yes**.
 
 | Method | TSPA | TSPB |
@@ -128,20 +152,20 @@ Results are identical in all implemented languages: **yes**.
 ## Running time
 
 <!-- auto:times (generated: edits between these markers are overwritten) -->
-Average time of one run of the algorithm only, over the same runs as above. The fastest language in each row is in bold.
+Average time of one run **in ms** (algorithm only, same runs as above); the fastest language per row is in bold.
 
 ### Instance TSPA
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Steepest LS, nodes exchange, random start | 336.9 ms | 4.69 ms | **4.31 ms** | 6.62 ms |
-| Steepest LS, edges exchange, random start | 255.2 ms | 3.48 ms | **3.38 ms** | 4.13 ms |
-| Greedy LS, nodes exchange, random start | 70.59 ms | 1.29 ms | **1.26 ms** | 1.37 ms |
-| Greedy LS, edges exchange, random start | 44.41 ms | 0.8554 ms | **0.8143 ms** | 0.8704 ms |
-| Steepest LS, nodes exchange, greedy start | 45.03 ms | 0.9084 ms | **0.8863 ms** | 0.9632 ms |
-| Steepest LS, edges exchange, greedy start | 43.54 ms | 0.8906 ms | **0.8749 ms** | 0.9478 ms |
-| Greedy LS, nodes exchange, greedy start | 52.27 ms | 1.08 ms | **1.05 ms** | 1.13 ms |
-| Greedy LS, edges exchange, greedy start | 50.53 ms | 1.06 ms | **1.04 ms** | 1.11 ms |
+| Steepest LS, nodes exchange, random start | 336.95 | 4.69 | **4.31** | 6.62 |
+| Steepest LS, edges exchange, random start | 255.24 | 3.48 | **3.38** | 4.13 |
+| Greedy LS, nodes exchange, random start | 70.59 | 1.29 | **1.26** | 1.37 |
+| Greedy LS, edges exchange, random start | 44.41 | 0.86 | **0.81** | 0.87 |
+| Steepest LS, nodes exchange, greedy start | 45.03 | 0.91 | **0.89** | 0.96 |
+| Steepest LS, edges exchange, greedy start | 43.54 | 0.89 | **0.87** | 0.95 |
+| Greedy LS, nodes exchange, greedy start | 52.27 | 1.08 | **1.05** | 1.13 |
+| Greedy LS, edges exchange, greedy start | 50.53 | 1.06 | **1.04** | 1.11 |
 
 ### Pareto plot (Instance TSPA)
 
@@ -151,14 +175,14 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Steepest LS, nodes exchange, random start | 329.3 ms | 4.57 ms | **4.37 ms** | 5.46 ms |
-| Steepest LS, edges exchange, random start | 294.9 ms | 3.54 ms | **3.44 ms** | 4.28 ms |
-| Greedy LS, nodes exchange, random start | 74.65 ms | 1.34 ms | **1.27 ms** | 1.29 ms |
-| Greedy LS, edges exchange, random start | 48.77 ms | **0.8300 ms** | 0.8732 ms | 0.9377 ms |
-| Steepest LS, nodes exchange, greedy start | 52.11 ms | 1.05 ms | **1.00 ms** | 1.10 ms |
-| Steepest LS, edges exchange, greedy start | 59.17 ms | 1.12 ms | **1.04 ms** | 1.16 ms |
-| Greedy LS, nodes exchange, greedy start | 57.89 ms | 1.17 ms | **1.12 ms** | 1.23 ms |
-| Greedy LS, edges exchange, greedy start | 59.31 ms | 1.21 ms | **1.18 ms** | 1.26 ms |
+| Steepest LS, nodes exchange, random start | 329.26 | 4.57 | **4.37** | 5.46 |
+| Steepest LS, edges exchange, random start | 294.92 | 3.54 | **3.44** | 4.28 |
+| Greedy LS, nodes exchange, random start | 74.65 | 1.34 | **1.27** | 1.29 |
+| Greedy LS, edges exchange, random start | 48.77 | **0.83** | 0.87 | 0.94 |
+| Steepest LS, nodes exchange, greedy start | 52.11 | 1.05 | **1.00** | 1.10 |
+| Steepest LS, edges exchange, greedy start | 59.17 | 1.12 | **1.04** | 1.16 |
+| Greedy LS, nodes exchange, greedy start | 57.89 | 1.17 | **1.12** | 1.23 |
+| Greedy LS, edges exchange, greedy start | 59.31 | 1.21 | **1.18** | 1.26 |
 
 ### Pareto plot (Instance TSPB)
 
@@ -229,8 +253,8 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 ## Conclusions
 
-- Local search beats every earlier method: the best average drops from 73 350 to 72 971 on TSPA and from 55 698 to 52 461 on TSPB.
-- Edges exchange is much better than nodes exchange from random starts (average TSPA 76 225 vs 89 742, TSPB 52 461 vs 66 055).
-- From greedy starts all four variants end within 1 % of each other, since the start is already close to a local optimum.
-- Greedy LS reaches the same quality as steepest LS about 4× faster from random starts.
+- **Local search beats every earlier method**: the best average drops from 73 350 to 72 971 on TSPA and from 55 698 to 52 461 on TSPB.
+- **Edges exchange is much better than nodes exchange** from random starts (average TSPA 76 225 vs 89 742, TSPB 52 461 vs 66 055).
+- From greedy starts all four variants end **within 1 % of each other**, since the start is already close to a local optimum.
+- Greedy LS reaches the same quality as steepest LS **about 4× faster** from random starts.
 - **Two results break the expected pattern.** On TSPB random starts beat greedy starts (52 461 vs 57 019): the construction builds a short tour through expensive nodes, and local search cannot move it to a cheaper region. From greedy starts greedy LS is slower than steepest LS: improving moves are rare near a local optimum, so greedy browses most of the neighborhood anyway and pays for a random draw on every move.
