@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 330" width="400" height="330" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#1c2230">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0L10,5L0,10z" fill="#3157d5"/>
+    </marker>
+  </defs>
+  <rect width="400" height="330" fill="#fff"/>
+
+  <!-- start -->
+  <rect x="50" y="8" width="200" height="40" rx="20" fill="#3157d5"/>
+  <text x="150" y="33" text-anchor="middle" fill="#fff" font-weight="bold">random tour</text>
+  <line x1="150" y1="48" x2="150" y2="76" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- core calculations: full evaluation -->
+  <rect x="50" y="78" width="200" height="44" rx="6" fill="#fff4dc" stroke="#e0a526" stroke-width="2"/>
+  <text x="150" y="105" text-anchor="middle" font-weight="bold">evaluate all moves → LM</text>
+  <line x1="150" y1="122" x2="150" y2="150" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- applicable move? -->
+  <path d="M150,152L245,190L150,228L55,190z" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="150" y="187" text-anchor="middle" font-weight="bold">applicable</text>
+  <text x="150" y="203" text-anchor="middle" font-weight="bold">move in LM?</text>
+  <line x1="150" y1="228" x2="150" y2="262" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="159" y="249" font-size="11" fill="#4a5163">yes</text>
+
+  <!-- apply, then browse LM again -->
+  <rect x="50" y="264" width="200" height="40" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="150" y="289" text-anchor="middle" font-weight="bold">apply it</text>
+  <path d="M50,284H20V190H53" fill="none" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- LM just evaluated? -->
+  <line x1="245" y1="190" x2="288" y2="190" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="266" y="183" text-anchor="middle" font-size="11" fill="#4a5163">no</text>
+  <path d="M340,156L390,190L340,224L290,190z" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="340" y="187" text-anchor="middle" font-size="11" font-weight="bold">LM just</text>
+  <text x="340" y="200" text-anchor="middle" font-size="11" font-weight="bold">evaluated?</text>
+  <path d="M340,156V100H252" fill="none" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="349" y="132" font-size="11" fill="#4a5163">no</text>
+  <line x1="340" y1="224" x2="340" y2="262" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="349" y="249" font-size="11" fill="#4a5163">yes</text>
+  <rect x="290" y="264" width="100" height="40" rx="20" fill="#3157d5"/>
+  <text x="340" y="289" text-anchor="middle" fill="#fff" font-weight="bold">return tour</text>
+</svg>
