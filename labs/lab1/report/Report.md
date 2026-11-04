@@ -4,33 +4,32 @@ Author: Michał Żurawski 160252
 
 ## Description of the problem
 
-Each instance contains nodes with coordinates (x, y) and a cost. Select exactly half of the nodes (rounded up) and connect them into a closed cycle. Minimise **cycle length + sum of the costs of the selected nodes**. Distances are Euclidean, rounded to the nearest integer.
+Each instance has n = 200 nodes with coordinates (x, y) and a cost. Select exactly **half of the nodes** (k = 100) and connect them into a **closed cycle** that minimises **cycle length + sum of node costs**. Distances are Euclidean, rounded to integers.
 
 ## Algorithms
 
-Three greedy construction methods, 200 runs each (run i starts from node i), and 200 random solutions as a baseline. All greedy methods add one node per step, the one that increases the objective the least, and differ only in **where the new node may be inserted**.
+Three **greedy construction** methods (run i starts from node i). Each step adds the node that **increases the objective the least**; the methods differ only in **where the new node may be inserted**. **Random solutions** are the baseline.
 
 ### Intuition
 
-A greedy method builds the solution one node at a time and never undoes a choice. "Nearest" here means the smallest increase of the objective, so both the added length and the node cost count: a close but expensive node can lose to a farther cheap one.
+**Problem:** a random tour ignores both distances and node costs, and a plain nearest node can be close but expensive.
 
-The more places a node may go, the better each step can be. Nearest neighbor (end only) can only extend the path at its end, so it walks away from the start and pays a long closing edge at the end. Inserting at any position lets a node slip in between two tour nodes it lies close to. Greedy cycle keeps the tour closed all the time, so the closing edge is already paid for in every step.
-
-Example: the path ends at c, and node u lies 40 away from c but right next to the edge (a, b). End only must pay 40, any position pays d(a, u) + d(u, b) − d(a, b), e.g. 5.
+**Idea:** grow the tour one node at a time, always adding the node that increases the length plus cost the least: about 3.5 times better than random tours. The variants differ in where a node may go: only after the path end, between any two tour nodes, or into a tour kept closed at every step.
 
 ### Core calculations
 
 <!-- columns -->
-For every unused node u, the objective increase of adding it:
+For every unused node u we calculate **Δ = the increase of the objective** of inserting u at a given place; the **(node, place) with the smallest Δ** is inserted.
 
-Between tour nodes a and b:
+**Between tour nodes a and b:**
 `Δ = d(a, u) + d(u, b) − d(a, b) + cost(u)`
 
-In front of the path: `Δ = d(u, first) + cost(u)`
+**In front of the path:** `Δ = d(u, first) + cost(u)`
 
-After the path (the only option of end only): `Δ = d(last, u) + cost(u)`
+**After the path** (the only option of end only):
+`Δ = d(last, u) + cost(u)`
 
-The (node, position) with the smallest Δ is inserted. The path is closed into a cycle at the end.
+The path is closed into a cycle at the end.
 
 | Method | Start | u may go |
 |---|---|---|
@@ -45,6 +44,27 @@ Best partner = the node minimising `d(start, v) + cost(v)`.
 <!-- /columns -->
 
 <!-- pagebreak -->
+### Complexity
+
+| Method | Complexity per run | Δ per run |
+|---|---|--:|
+| Random solution | O(n) | 0 |
+| Nearest neighbor (end only) | O(nk) | 14 850 |
+| Nearest neighbor (any position) | O(nk²) | 676 500 |
+| Greedy cycle | O(nk²) | 661 650 |
+
+Δ per run is the TSPA average over 200 runs.
+
+#### Explanation
+
+A run has k − 1 = 99 steps, each adding one node; t = the number of tour nodes before the step, so n − t nodes are unused.
+
+- **Random solution:** shuffles the n nodes and keeps the first k → **O(n)**, no Δ.
+- **Nearest neighbor (end only):** step t computes one Δ per unused node, n − t ≤ n Δ in each of the k steps → **O(nk)** per run; in total `Σ (n − t) = 14 850` for t = 1 … 99.
+- **Nearest neighbor (any position):** step t computes a Δ for every unused node at each of the t + 1 places of the path, (n − t)(t + 1) ≤ nk Δ in each of the k steps → **O(nk²)** per run; in total `Σ (n − t)(t + 1) = 676 500` for t = 1 … 99.
+- **Greedy cycle:** n − 1 Δ to pick the second node, then step t computes a Δ for every unused node in each of the t cycle edges, (n − t) · t ≤ nk Δ in each of the k steps → **O(nk²)** per run; in total `(n − 1) + Σ (n − t) · t = 661 650` for t = 2 … 99.
+- So inserting at any place computes **about 45× more Δ than end only**, because every step tries every place of the tour.
+
 ### Pseudocode
 
 Simplified from `python/solver.py`. The three greedy methods share the loop; they differ in the starting tour and in how the next node and its position are found.
@@ -71,8 +91,8 @@ def random_solution(seed):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method. Each cell is av (min – max); the best value of each kind per instance is in bold.
-All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
+Objective = cycle length + node costs, 200 runs per method. Cells: av (min – max), best of each per instance in bold.
+All best solutions were checked with the solution checker: **yes**.
 Results are identical in all implemented languages: **yes**.
 
 | Method | TSPA | TSPB |
@@ -100,16 +120,16 @@ Results are identical in all implemented languages: **yes**.
 ## Running time
 
 <!-- auto:times (generated: edits between these markers are overwritten) -->
-Average time of one run of the algorithm only, over the same runs as above. The fastest language in each row is in bold.
+Average time of one run **in ms** (algorithm only, same runs as above); the fastest language per row is in bold.
 
 ### Instance TSPA
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Random solution | 0.0776 ms | 0.0004 ms | 0.0003 ms | **0.0003 ms** |
-| Nearest neighbor (end only) | 0.3740 ms | **0.0140 ms** | 0.0204 ms | 0.0235 ms |
-| Nearest neighbor (any position) | 24.39 ms | 0.5342 ms | **0.4811 ms** | 0.5672 ms |
-| Greedy cycle | 22.58 ms | 0.6874 ms | **0.4626 ms** | 0.6487 ms |
+| Random solution | 0.08 | 0.00 | 0.00 | **0.00** |
+| Nearest neighbor (end only) | 0.37 | **0.01** | 0.02 | 0.02 |
+| Nearest neighbor (any position) | 24.39 | 0.53 | **0.48** | 0.57 |
+| Greedy cycle | 22.58 | 0.69 | **0.46** | 0.65 |
 
 ### Pareto plot (Instance TSPA)
 
@@ -119,10 +139,10 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Random solution | 0.0702 ms | **0.0004 ms** | 0.0005 ms | 0.0005 ms |
-| Nearest neighbor (end only) | 0.3600 ms | **0.0156 ms** | 0.0240 ms | 0.0183 ms |
-| Nearest neighbor (any position) | 23.51 ms | 0.5293 ms | **0.5159 ms** | 0.5616 ms |
-| Greedy cycle | 21.92 ms | 0.5417 ms | **0.4642 ms** | 0.6392 ms |
+| Random solution | 0.07 | **0.00** | 0.00 | 0.00 |
+| Nearest neighbor (end only) | 0.36 | **0.02** | 0.02 | 0.02 |
+| Nearest neighbor (any position) | 23.51 | 0.53 | **0.52** | 0.56 |
+| Greedy cycle | 21.92 | 0.54 | **0.46** | 0.64 |
 
 ### Pareto plot (Instance TSPB)
 
@@ -169,6 +189,6 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 ## Conclusions
 
-- Random solutions are about 3.5 times worse than any greedy method.
-- Inserting at any position beats appending at the end on TSPA; on TSPB all greedy methods are close on average.
-- Insertion at any position runs about 30 times longer than end only, but still well under 1 ms per run.
+- Random solutions are **about 3.5 times worse** than any greedy method.
+- **Inserting at any position beats appending at the end** on TSPA; on TSPB all greedy methods are close on average.
+- Insertion at any position runs **about 30 times longer** than end only, but still well under 1 ms per run.
