@@ -1,0 +1,6 @@
+{
+  "title": "List of improving moves",
+  "methods": [
+    { "id": "ls_move_list_steepest_edges_random", "name": "Steepest LS, edges exchange, list of improving moves, random start", "short": "Steepest LS, move list, random start", "shape": "cycle" }
+  ]
+}
