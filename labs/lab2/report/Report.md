@@ -4,34 +4,32 @@ Author: Michał Żurawski 160252
 
 ## Description of the problem
 
-Each instance contains nodes with coordinates (x, y) and a cost. Select exactly half of the nodes (rounded up) and connect them into a closed cycle. Minimise **cycle length + sum of the costs of the selected nodes**. Distances are Euclidean, rounded to the nearest integer.
+Each instance has n = 200 nodes with coordinates (x, y) and a cost. Select exactly **half of the nodes** (k = 100) and connect them into a **closed cycle** that minimises **cycle length + sum of node costs**. Distances are Euclidean, rounded to integers.
 
 ## Algorithms
 
-Four greedy construction methods, 200 runs each (run i starts from node i). They grow the solution like lab 1's nearest neighbor (any position) and greedy cycle, and differ only in **which node is inserted next**.
+Four **greedy construction** methods (run i starts from node i). They grow the solution like lab 1's **nearest neighbor (any position)** and **greedy cycle**, and differ only in **which node is inserted next**.
 
 ### Intuition
 
-Plain greedy takes the cheapest insertion right now. A node that fits well in only one place loses it once another node takes that place, and later has to go somewhere much worse. The **regret** of a node is how much we lose if its best position is gone and the second best must be used, so the most "urgent" node (highest regret) is inserted first, and nodes that fit well in several places can wait.
+**Problem:** plain greedy takes the cheapest insertion right now; a node that fits well in only one place loses it once another node takes that place, and later has to go somewhere much worse.
 
-Example: u has insertion increases 10, 50, 60 → regret 40; v has 8, 9, 30 → regret 1. Greedy picks v (8 < 10), regret picks u: if u waits it pays at least 50, while v still has 9.
-
-Pure regret ignores the node cost, so it happily takes expensive nodes. **2-regret + best change** also rewards cheap insertions.
+**Idea:** insert first the node that would lose the most by waiting (the highest **regret**); nodes that fit well in several places can wait. Pure regret ignores how cheap an insertion is, so the **best change** variants weigh regret and insertion cost equally.
 
 ### Core calculations
 
 <!-- columns -->
-For every unused node u and every place (a, b) it could be inserted (path: also the two ends, cycle: every edge):
+For every unused node u we calculate **Δ = the length increase** of inserting it at each place (a, b) (path: also the two ends, cycle: every edge), and from these Δ the **score** that picks the next node.
 
-`Δ(u, a, b) = d(a, u) + d(u, b) − d(a, b)`
+**Insertion:** `Δ(u, a, b) = d(a, u) + d(u, b) − d(a, b)`
 
-`regret(u) = second smallest Δ − smallest Δ`
+**Regret:** `regret(u) = second smallest Δ − smallest Δ`
 
-`best_change(u) = smallest Δ + cost(u)`
+**Best change:** `best_change(u) = smallest Δ + cost(u)`
 
-`score(u) = α · regret(u) − β · best_change(u)`
+**Score:** `score(u) = α · regret(u) − β · best_change(u)`
 
-The node with the highest score is inserted at its smallest-Δ place.
+The node with the **highest score** is inserted at its smallest-Δ place.
 
 | Method | α | β |
 |---|:-:|:-:|
@@ -42,6 +40,29 @@ The node with the highest score is inserted at its smallest-Δ place.
 <!-- /columns -->
 
 <!-- pagebreak -->
+### Complexity
+
+| Method | Complexity per run | Δ per run |
+|---|---|--:|
+| Random solution | O(n) | 0 |
+| Nearest neighbor (any position) | O(nk²) | 676 500 |
+| Greedy cycle | O(nk²) | 661 650 |
+| Nearest neighbor (any position), 2-regret | O(nk²) | 676 500 |
+| Nearest neighbor (any position), 2-regret + best change | O(nk²) | 676 500 |
+| Greedy cycle, 2-regret | O(nk²) | 661 650 |
+| Greedy cycle, 2-regret + best change | O(nk²) | 661 650 |
+
+Δ per run is the TSPA average over 200 runs.
+
+#### Explanation
+
+A run has k − 1 = 99 steps, each adding one node; t = the number of tour nodes before the step, so n − t nodes are unused.
+
+- **Random solution:** shuffles the n nodes and keeps the first k → **O(n)**, no Δ.
+- **Nearest neighbor (any position)** and its 2-regret variants: step t computes a Δ for every unused node at each of the t + 1 places of the path, (n − t)(t + 1) ≤ nk Δ in each of the k steps → **O(nk²)** per run; in total `Σ (n − t)(t + 1) = 676 500` for t = 1 … 99.
+- **Greedy cycle** and its 2-regret variants: n − 1 Δ to pick the second node, then step t computes a Δ for every unused node in each of the t cycle edges, (n − t) · t ≤ nk Δ in each of the k steps → **O(nk²)** per run; in total `(n − 1) + Σ (n − t) · t = 661 650` for t = 2 … 99.
+- So **regret computes exactly the same Δ** as plain insertion; it is slower only because it keeps all Δ of a node to find the two smallest, instead of just the smallest.
+
 ### Pseudocode
 
 Simplified from `python/solver.py`. Nearest neighbor and greedy cycle share the loop; they differ in the starting tour and in how the insertion increases are listed (`path_insertion_increases` / `cycle_insertion_increases`).
@@ -68,8 +89,8 @@ def regret_insertion(tour, weights):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method. Each cell is av (min – max); the best value of each kind per instance is in bold.
-All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
+Objective = cycle length + node costs, 200 runs per method. Cells: av (min – max), best of each per instance in bold.
+All best solutions were checked with the solution checker: **yes**.
 Results are identical in all implemented languages: **yes**.
 
 | Method | TSPA | TSPB |
@@ -109,20 +130,20 @@ Results are identical in all implemented languages: **yes**.
 ## Running time
 
 <!-- auto:times (generated: edits between these markers are overwritten) -->
-Average time of one run of the algorithm only, over the same runs as above. The fastest language in each row is in bold.
+Average time of one run **in ms** (algorithm only, same runs as above); the fastest language per row is in bold.
 
 ### Instance TSPA
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Random solution | 0.0776 ms | 0.0004 ms | 0.0003 ms | **0.0003 ms** |
-| Nearest neighbor (end only) | 0.3740 ms | **0.0140 ms** | 0.0204 ms | 0.0235 ms |
-| Nearest neighbor (any position) | 24.39 ms | 0.5342 ms | **0.4811 ms** | 0.5672 ms |
-| Greedy cycle | 22.58 ms | 0.6874 ms | **0.4626 ms** | 0.6487 ms |
-| Nearest neighbor (any position), 2-regret | 42.75 ms | **0.6887 ms** | 2.96 ms | 3.21 ms |
-| Nearest neighbor (any position), 2-regret + best change | 44.34 ms | **0.6788 ms** | 2.86 ms | 3.14 ms |
-| Greedy cycle, 2-regret | 43.19 ms | **0.9425 ms** | 2.80 ms | 1.41 ms |
-| Greedy cycle, 2-regret + best change | 43.23 ms | **1.00 ms** | 2.78 ms | 1.39 ms |
+| Random solution | 0.08 | 0.00 | 0.00 | **0.00** |
+| Nearest neighbor (end only) | 0.37 | **0.01** | 0.02 | 0.02 |
+| Nearest neighbor (any position) | 24.39 | 0.53 | **0.48** | 0.57 |
+| Greedy cycle | 22.58 | 0.69 | **0.46** | 0.65 |
+| Nearest neighbor (any position), 2-regret | 42.75 | **0.69** | 2.96 | 3.21 |
+| Nearest neighbor (any position), 2-regret + best change | 44.34 | **0.68** | 2.86 | 3.14 |
+| Greedy cycle, 2-regret | 43.19 | **0.94** | 2.80 | 1.41 |
+| Greedy cycle, 2-regret + best change | 43.23 | **1.00** | 2.78 | 1.39 |
 
 ### Pareto plot (Instance TSPA)
 
@@ -132,14 +153,14 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Random solution | 0.0702 ms | **0.0004 ms** | 0.0005 ms | 0.0005 ms |
-| Nearest neighbor (end only) | 0.3600 ms | **0.0156 ms** | 0.0240 ms | 0.0183 ms |
-| Nearest neighbor (any position) | 23.51 ms | 0.5293 ms | **0.5159 ms** | 0.5616 ms |
-| Greedy cycle | 21.92 ms | 0.5417 ms | **0.4642 ms** | 0.6392 ms |
-| Nearest neighbor (any position), 2-regret | 44.36 ms | **0.6792 ms** | 2.78 ms | 3.66 ms |
-| Nearest neighbor (any position), 2-regret + best change | 43.22 ms | **0.7049 ms** | 2.91 ms | 3.14 ms |
-| Greedy cycle, 2-regret | 43.15 ms | **0.9417 ms** | 2.80 ms | 1.48 ms |
-| Greedy cycle, 2-regret + best change | 42.78 ms | **0.9413 ms** | 2.76 ms | 1.40 ms |
+| Random solution | 0.07 | **0.00** | 0.00 | 0.00 |
+| Nearest neighbor (end only) | 0.36 | **0.02** | 0.02 | 0.02 |
+| Nearest neighbor (any position) | 23.51 | 0.53 | **0.52** | 0.56 |
+| Greedy cycle | 21.92 | 0.54 | **0.46** | 0.64 |
+| Nearest neighbor (any position), 2-regret | 44.36 | **0.68** | 2.78 | 3.66 |
+| Nearest neighbor (any position), 2-regret + best change | 43.22 | **0.70** | 2.91 | 3.14 |
+| Greedy cycle, 2-regret | 43.15 | **0.94** | 2.80 | 1.48 |
+| Greedy cycle, 2-regret + best change | 42.78 | **0.94** | 2.76 | 1.40 |
 
 ### Pareto plot (Instance TSPB)
 
@@ -186,6 +207,6 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 ## Conclusions
 
-- Pure 2-regret is even worse than lab 1 solutions because it ignores node costs; adding the best change fixes this.
-- 2-regret + best change beats the lab 1 methods.
-- 2-regret solutions run much longer than lab 1 solutions.
+- Pure 2-regret is even worse than lab 1 solutions because it **ignores node costs**; adding the **best change** fixes this.
+- **2-regret + best change beats the lab 1 methods**.
+- 2-regret solutions **run much longer** than lab 1 solutions.
