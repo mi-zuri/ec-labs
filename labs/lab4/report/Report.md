@@ -4,46 +4,53 @@ Author: Michał Żurawski 160252
 
 ## Description of the problem
 
-Each instance contains nodes with coordinates (x, y) and a cost. Select exactly half of the nodes (rounded up) and connect them into a closed cycle. Minimise **cycle length + sum of the costs of the selected nodes**. Distances are Euclidean, rounded to the nearest integer.
+Each instance has n = 200 nodes with coordinates (x, y) and a cost. Select exactly **half of the nodes** (k = 100) and connect them into a **closed cycle** that minimises **cycle length + sum of node costs**. Distances are Euclidean, rounded to integers.
 
 ## Algorithms
 
-One method, 200 runs: steepest local search with lab 3's best neighborhood (inter-route node exchange + edges exchange) from random starts (run i uses seed 42 + i, so the same starting tours as lab 3), but each step evaluates only **candidate moves**, the moves that add an edge to one of the 10 nearest nodes. The baseline is lab 3's steepest LS, edges exchange, random start, which evaluates the whole neighborhood.
+**Steepest local search** with lab 3's best neighborhood (**inter-route node exchange + edges exchange**), started from the same **random tours** as lab 3 (run i uses seed 42 + i). Each step evaluates only **candidate moves**: the moves that add an edge to one of the **10 nearest nodes**.
 
 ### Intuition
 
-Steepest local search spends almost all its time on hopeless moves: in a good tour nearly every edge joins a node to one of its few nearest nodes, so a move that adds an edge to a far node must remove even longer edges just to break even, and that almost never happens. Candidate moves skip them: for every node we keep a short list of its nearest nodes, and evaluate only moves that bring one of these short edges into the tour. Example: one step of the full search evaluates 100 · 100 + 100 · 99 / 2 = 14 950 moves; the candidate search evaluates at most 100 · 10 · 2 = 2 000, 7.5× fewer. The improving moves it skips are the price paid in quality: small on TSPB, 5 % on TSPA.
+**Problem:** steepest LS spends almost all its time on hopeless moves: in a good tour nearly every edge joins a node to one of its few nearest nodes, so a move that adds an edge to a far node almost never improves.
+
+**Idea:** keep for every node its 10 nearest nodes and evaluate only the moves that bring one of these short edges into the tour: at most 100 · 10 · 2 = 2 000 instead of 14 950 moves per step. The improving moves it skips cost a little quality.
 
 ### Core calculations
 
 <!-- columns -->
-Candidate edges: N(a) = the 10 nodes b ≠ a with the smallest
+We calculate **Δ = the change of the objective** only for **candidate moves**, the moves that add a **candidate edge** (a, b) with b ∈ N(a): N(a) = the 10 nodes b ≠ a with the smallest `d(a,b) + c(b)`. p(x), s(x) = predecessor, successor of x.
 
-`d(a,b) + c(b)`
+**Node exchange**, b not in the tour replaces s = s(a) (or symmetrically p(a)), t = s(s):
 
-and (a, b) is a candidate edge if b ∈ N(a). p(x), s(x) = predecessor, successor of x in the tour.
+`Δ = c(b) − c(s) + d(a,b) + d(b,t) − d(a,s) − d(s,t)`
 
-For a in the tour and b ∈ N(a), the two moves that add (a, b):
-
-b not in the tour, b replaces s(a) (or symmetrically p(a)):
-
-`Δ = c(b) − c(s) + d(a,b) + d(b,s(s)) − d(a,s) − d(s,s(s))`
-
-b in the tour, edges exchange with the successors (or symmetrically the predecessors):
+**Edges exchange**, b in the tour, with the successors (or symmetrically the predecessors):
 
 `Δ = d(a,b) + d(s(a),s(b)) − d(a,s(a)) − d(b,s(b))`
 
-The move with the lowest Δ is applied if Δ < 0; otherwise the tour is a local optimum.
+The move with the **lowest Δ** is applied if Δ < 0; otherwise the tour is a local optimum.
 
-| Method | moves per step |
-|---|--:|
-| Baseline (lab 3) | 14 950 |
-| Candidate moves | ≤ 2 000 |
 <!-- column -->
 ![](figures/candidate_moves_flowchart.svg)
 <!-- /columns -->
 
 <!-- pagebreak -->
+### Complexity
+
+| Method | Complexity per step | Δ per run |
+|---|---|--:|
+| Steepest LS, edges exchange, random start | O(nk) | 2 003 300 |
+| Steepest LS, edges exchange, candidate moves, random start | O(k), lists O(n² log n) | 227 305 |
+
+Δ per run is the TSPA average over 200 runs.
+
+#### Explanation
+
+- **Full steepest search:** every step computes the Δ of every move, k(n − k) inter-route + k(k − 1)/2 intra-route ≤ nk → **O(nk)** per step: `k(n − k) + k(k − 1)/2 = 14 950`; 134 steps per run.
+- **Candidate moves:** a step computes Δ only for moves adding a candidate edge, 2 moves for each of the 10 candidates of each of the k tour nodes → **O(k)** per step: at most `2 × 10 × k = 2 000` (about 1 800 on average); 126 steps per run. Once per run the 10 candidates of every node are found by sorting → **lists O(n² log n)**.
+- So **candidate moves compute 8.8× fewer Δ than the full search** from the same random starts.
+
 ### Pseudocode
 
 Simplified from `python/solver.py`. `local_search` is lab 3's steepest loop; only the move search changed: `find_best_candidate_move` generates the moves from the candidate lists instead of scanning a fixed list of all moves, so `position[v]` (index of v in the tour, or `NOT_SELECTED`) is kept up to date by `apply_move`.
@@ -93,41 +100,41 @@ def apply_move(tour, position, move):
 ## Results
 
 <!-- auto:results (generated: edits between these markers are overwritten) -->
-Objective = cycle length + sum of node costs, over 200 runs per method. Each cell is av (min – max); the best value of each kind per instance is in bold.
-All best solutions were checked with the solution checker (the same computation as the lecturer's Solution checker.xlsx): **yes**.
+Objective = cycle length + node costs, 200 runs per method. Cells: av (min – max), best of each per instance in bold.
+All best solutions were checked with the solution checker: **yes**.
 Results are identical in all implemented languages: **yes**.
 
 | Method | TSPA | TSPB |
 |---|:-:|:-:|
-| Steepest LS, nodes exchange, random start | 89742 (81937 – 96386) | 66055 (59059 – 74933) |
-| Steepest LS, edges exchange, random start | **76225** (**74248** – **79388**) | **52461** (50265 – **55173**) |
+| Steepest LS, edges exchange, random start | 76225 (74248 – 79388) | **52461** (50265 – **55173**) |
+| Steepest LS, edges exchange, greedy start | **72997** (**71955** – **74682**) | 57019 (52566 – 62301) |
 | Steepest LS, edges exchange, candidate moves, random start | 80062 (76007 – 85627) | 52560 (**49902** – 55299) |
 
 ### Visualisation (Instance TSPA)
 
-![Steepest LS, nodes exchange, random start<br>**81937** (length 30984 + cost 50953)](report_files/TSPA_lab3_ls_steepest_nodes_random.svg)
 ![Steepest LS, edges exchange, random start<br>**74248** (length 22259 + cost 51989)](report_files/TSPA_lab3_ls_steepest_edges_random.svg)
+![Steepest LS, edges exchange, greedy start<br>**71955** (length 21123 + cost 50832)](report_files/TSPA_lab3_ls_steepest_edges_greedy.svg)
 ![Steepest LS, edges exchange, candidate moves, random start<br>**76007** (length 22323 + cost 53684)](report_files/TSPA_lab4_ls_candidates_steepest_edges_random.svg)
 
 ### Visualisation (Instance TSPB)
 
-![Steepest LS, nodes exchange, random start<br>**59059** (length 28949 + cost 30110)](report_files/TSPB_lab3_ls_steepest_nodes_random.svg)
 ![Steepest LS, edges exchange, random start<br>**50265** (length 19741 + cost 30524)](report_files/TSPB_lab3_ls_steepest_edges_random.svg)
+![Steepest LS, edges exchange, greedy start<br>**52566** (length 17522 + cost 35044)](report_files/TSPB_lab3_ls_steepest_edges_greedy.svg)
 ![Steepest LS, edges exchange, candidate moves, random start<br>**49902** (length 19786 + cost 30116)](report_files/TSPB_lab4_ls_candidates_steepest_edges_random.svg)
 <!-- /auto:results -->
 
 ## Running time
 
 <!-- auto:times (generated: edits between these markers are overwritten) -->
-Average time of one run of the algorithm only, over the same runs as above. The fastest language in each row is in bold.
+Average time of one run **in ms** (algorithm only, same runs as above); the fastest language per row is in bold.
 
 ### Instance TSPA
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Steepest LS, nodes exchange, random start | 336.9 ms | 4.69 ms | **4.31 ms** | 6.62 ms |
-| Steepest LS, edges exchange, random start | 255.2 ms | 3.48 ms | **3.38 ms** | 4.13 ms |
-| Steepest LS, edges exchange, candidate moves, random start | 54.18 ms | **0.6827 ms** | 1.24 ms | 1.03 ms |
+| Steepest LS, edges exchange, random start | 255.24 | 3.48 | **3.38** | 4.13 |
+| Steepest LS, edges exchange, greedy start | 43.54 | 0.89 | **0.87** | 0.95 |
+| Steepest LS, edges exchange, candidate moves, random start | 54.18 | **0.68** | 1.24 | 1.03 |
 
 ### Pareto plot (Instance TSPA)
 
@@ -137,9 +144,9 @@ Average time of one run of the algorithm only, over the same runs as above. The 
 
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
-| Steepest LS, nodes exchange, random start | 329.3 ms | 4.57 ms | **4.37 ms** | 5.46 ms |
-| Steepest LS, edges exchange, random start | 294.9 ms | 3.54 ms | **3.44 ms** | 4.28 ms |
-| Steepest LS, edges exchange, candidate moves, random start | 56.34 ms | **0.6627 ms** | 1.17 ms | 0.9814 ms |
+| Steepest LS, edges exchange, random start | 294.92 | 3.54 | **3.44** | 4.28 |
+| Steepest LS, edges exchange, greedy start | 59.17 | 1.12 | **1.04** | 1.16 |
+| Steepest LS, edges exchange, candidate moves, random start | 56.34 | **0.66** | 1.17 | 0.98 |
 
 ### Pareto plot (Instance TSPB)
 
@@ -188,6 +195,6 @@ The assignment fixes 10 candidates but allows choosing it experimentally. Same 2
 
 ## Conclusions
 
-- Candidate moves cost little quality on TSPB (52 560 vs 52 461 on average) but 5 % on TSPA (80 062 vs 76 225), where the improving moves more often need an edge outside the 10 nearest nodes; 20 candidates close that gap.
-- Evaluating at most 2 000 instead of 14 950 moves per step makes steepest LS 2.7–5.3× faster depending on the language (C: 0.68 ms vs 3.48 ms on TSPA, Python: 54 ms vs 255 ms).
-- The best single solution of TSPB so far comes from candidate moves (49 902, below 49 955 of greedy LS in lab 3).
+- **Candidate moves cost little quality** on TSPB (52 560 vs 52 461 on average) but 5 % on TSPA (80 062 vs 76 225), where the improving moves more often need an edge outside the 10 nearest nodes; 20 candidates close that gap.
+- Evaluating at most 2 000 instead of 14 950 moves per step makes steepest LS **2.7–5.3× faster** depending on the language (C: 0.68 ms vs 3.48 ms on TSPA, Python: 54 ms vs 255 ms).
+- The best single solution of TSPB so far comes from **candidate moves** (49 902, below 49 955 of greedy LS in lab 3).
