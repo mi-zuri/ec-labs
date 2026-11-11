@@ -28,7 +28,6 @@ Every solution returned is checked by an independent checker in the server.
 ## Layout
 
 ```text
-course/                   course material (problem description)
 data/                     instances (*.csv): every file here appears in the tool
 labs/labN/                one folder per lab
   ├── Assignment N.pdf
