@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 360" width="400" height="360" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#1c2230">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0L10,5L0,10z" fill="#3157d5"/>
+    </marker>
+  </defs>
+  <rect width="400" height="360" fill="#fff"/>
+
+  <!-- start -->
+  <rect x="50" y="8" width="200" height="40" rx="20" fill="#3157d5"/>
+  <text x="150" y="33" text-anchor="middle" fill="#fff" font-weight="bold">random tour y</text>
+  <line x1="150" y1="48" x2="150" y2="76" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- local search -->
+  <rect x="50" y="78" width="200" height="40" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="150" y="103" text-anchor="middle" font-weight="bold">local search on y</text>
+  <line x1="150" y1="118" x2="150" y2="146" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- acceptance -->
+  <rect x="50" y="148" width="200" height="40" rx="6" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="150" y="173" text-anchor="middle" font-weight="bold">x = better of x, y</text>
+  <line x1="150" y1="188" x2="150" y2="210" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- time left? -->
+  <path d="M150,212L245,250L150,288L55,250z" fill="#eef2fc" stroke="#3157d5" stroke-width="2"/>
+  <text x="150" y="255" text-anchor="middle" font-weight="bold">time left?</text>
+  <line x1="150" y1="288" x2="150" y2="306" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="159" y="301" font-size="11" fill="#4a5163">yes</text>
+
+  <!-- core calculations: perturbation, then back to the local search -->
+  <rect x="50" y="308" width="200" height="40" rx="6" fill="#fff4dc" stroke="#e0a526" stroke-width="2"/>
+  <text x="150" y="333" text-anchor="middle" font-weight="bold">perturb x → y</text>
+  <path d="M50,328H20V98H48" fill="none" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- stop -->
+  <line x1="245" y1="250" x2="288" y2="250" stroke="#3157d5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="266" y="243" text-anchor="middle" font-size="11" fill="#4a5163">no</text>
+  <rect x="290" y="230" width="100" height="40" rx="20" fill="#3157d5"/>
+  <text x="340" y="255" text-anchor="middle" fill="#fff" font-weight="bold">return x</text>
+</svg>
