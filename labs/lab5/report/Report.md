@@ -40,13 +40,14 @@ For every move we calculate **Δ = the change of the objective** (Δ < 0: improv
 <!-- /columns -->
 
 <!-- pagebreak -->
+
 ### Complexity
 
-| Method | Complexity per step | Δ per run |
-|---|---|--:|
-| Steepest LS, edges exchange, random start | O(nk) | 2 003 300 |
-| Steepest LS, edges exchange, candidate moves, random start | O(k), lists O(n² log n) | 227 305 |
-| Steepest LS, edges exchange, list of improving moves, random start | browse ≤ O(nk), rebuild O(nk log nk) | 177 201 |
+| Method                                                             | Complexity per step                  | Δ per run |
+| ------------------------------------------------------------------ | ------------------------------------ | --------: |
+| Steepest LS, edges exchange, random start                          | O(nk)                                | 2 003 300 |
+| Steepest LS, edges exchange, candidate moves, random start         | O(k), lists O(n² log n)              |   227 305 |
+| Steepest LS, edges exchange, list of improving moves, random start | browse ≤ O(nk), rebuild O(nk log nk) |   177 201 |
 
 Δ per run is the TSPA average over 200 runs.
 
@@ -56,6 +57,7 @@ For every move we calculate **Δ = the change of the objective** (Δ < 0: improv
 - **Candidate moves:** a step computes Δ only for moves adding a candidate edge, 2 moves for each of the 10 candidates of each of the k tour nodes → **O(k)** per step: at most `2 × 10 × k = 2 000` (about 1 800 on average); 126 steps per run. Once per run the 10 candidates of every node are found by sorting → **lists O(n² log n)**.
 - **LM:** a step computes no Δ; it browses LM from the best, O(1) per stored move and at most all of them → **browse ≤ O(nk)**, then applies the move in O(k). Only when no stored move is applicable, a rebuild computes the Δ of both directions of every edge pair, `k(n − k) + k(k − 3) = 19 700`, and sorts the improving ones → **rebuild O(nk log nk)**; 9 rebuilds for 154 moves per run.
 - So **LM computes 11× fewer Δ than the full search** and slightly fewer than candidate moves, but it also pays for sorting and browsing LM.
+
 
 ### Pseudocode
 
@@ -122,21 +124,18 @@ Results are identical in all implemented languages: **yes**.
 | Method | TSPA | TSPB |
 |---|:-:|:-:|
 | Steepest LS, edges exchange, random start | 76225 (74248 – 79388) | **52461** (50265 – **55173**) |
-| Steepest LS, edges exchange, greedy start | **72997** (**71955** – **74682**) | 57019 (52566 – 62301) |
 | Steepest LS, edges exchange, candidate moves, random start | 80062 (76007 – 85627) | 52560 (**49902** – 55299) |
-| Steepest LS, edges exchange, list of improving moves, random start | 76119 (73975 – 79089) | 52493 (50369 – 55548) |
+| Steepest LS, edges exchange, list of improving moves, random start | **76119** (**73975** – **79089**) | 52493 (50369 – 55548) |
 
 ### Visualisation (Instance TSPA)
 
 ![Steepest LS, edges exchange, random start<br>**74248** (length 22259 + cost 51989)](report_files/TSPA_lab3_ls_steepest_edges_random.svg)
-![Steepest LS, edges exchange, greedy start<br>**71955** (length 21123 + cost 50832)](report_files/TSPA_lab3_ls_steepest_edges_greedy.svg)
 ![Steepest LS, edges exchange, candidate moves, random start<br>**76007** (length 22323 + cost 53684)](report_files/TSPA_lab4_ls_candidates_steepest_edges_random.svg)
 ![Steepest LS, edges exchange, list of improving moves, random start<br>**73975** (length 22573 + cost 51402)](report_files/TSPA_lab5_ls_move_list_steepest_edges_random.svg)
 
 ### Visualisation (Instance TSPB)
 
 ![Steepest LS, edges exchange, random start<br>**50265** (length 19741 + cost 30524)](report_files/TSPB_lab3_ls_steepest_edges_random.svg)
-![Steepest LS, edges exchange, greedy start<br>**52566** (length 17522 + cost 35044)](report_files/TSPB_lab3_ls_steepest_edges_greedy.svg)
 ![Steepest LS, edges exchange, candidate moves, random start<br>**49902** (length 19786 + cost 30116)](report_files/TSPB_lab4_ls_candidates_steepest_edges_random.svg)
 ![Steepest LS, edges exchange, list of improving moves, random start<br>**50369** (length 19937 + cost 30432)](report_files/TSPB_lab5_ls_move_list_steepest_edges_random.svg)
 <!-- /auto:results -->
@@ -151,7 +150,6 @@ Average time of one run **in ms** (algorithm only, same runs as above); the fast
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
 | Steepest LS, edges exchange, random start | 255.24 | 3.48 | **3.38** | 4.13 |
-| Steepest LS, edges exchange, greedy start | 43.54 | 0.89 | **0.87** | 0.95 |
 | Steepest LS, edges exchange, candidate moves, random start | 54.18 | **0.68** | 1.24 | 1.03 |
 | Steepest LS, edges exchange, list of improving moves, random start | 19.08 | 1.10 | 0.96 | **0.92** |
 
@@ -164,7 +162,6 @@ Average time of one run **in ms** (algorithm only, same runs as above); the fast
 | Method | Python | C | C++ | Rust |
 |---|--:|--:|--:|--:|
 | Steepest LS, edges exchange, random start | 294.92 | 3.54 | **3.44** | 4.28 |
-| Steepest LS, edges exchange, greedy start | 59.17 | 1.12 | **1.04** | 1.16 |
 | Steepest LS, edges exchange, candidate moves, random start | 56.34 | **0.66** | 1.17 | 0.98 |
 | Steepest LS, edges exchange, list of improving moves, random start | 19.28 | 0.94 | 0.81 | **0.77** |
 
@@ -195,7 +192,6 @@ Average time of one run **in ms** (algorithm only, same runs as above); the fast
 
 ## Conclusions
 
-- **LM reaches the quality of the full steepest search** (76 119 vs 76 225 on TSPA, 52 493 vs 52 461 on TSPB). Both end in a local optimum of the same neighborhood; only the order of the applied moves differs, because moves created after the last evaluation wait for the next one.
-- Evaluating the neighborhood 9 instead of 134 times per run makes the search **3.2–5.6× faster** in C, C++ and Rust and **13–15× faster** in Python (19 ms vs 255–295 ms). In Python almost all the time is spent on evaluations, while compiled code also pays for sorting and browsing LM.
-- Compared with candidate moves (lab 4), LM is **about as fast** (C 1.10 vs 0.68 ms, Rust 0.92 vs 1.03 ms on TSPA) **without their quality loss** on TSPA (76 119 vs 80 062).
-- LM speeds the search up but **does not move the best results so far**: on TSPA greedy-start LS from lab 3 is still best on average (72 971), and the best TSPB solution still comes from candidate moves (49 902 vs 50 369 here).
+- **LM reaches the quality of the full steepest search** (76 119 vs 76 225 on TSPA, 52 493 vs 52 461 on TSPB).
+- Evaluating the neighborhood 9 instead of 134 times per run makes the search **3.2–5.6× faster** in C, C++ and Rust and **13–15× faster** in Python (19 ms vs 255–295 ms).
+- Compared with candidate moves, LM is **about as fast** (in C, C++ and Rust) **or faster** (in python) **without the quality loss** on TSPA (76 119 vs 80 062).
