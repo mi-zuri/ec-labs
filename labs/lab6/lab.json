@@ -1,0 +1,8 @@
+{
+  "title": "Multiple start and iterated local search",
+  "iterations": "Runs of basic local search per run",
+  "methods": [
+    { "id": "msls", "name": "MSLS, best of 400 steepest LS with list of moves", "short": "MSLS", "shape": "cycle" },
+    { "id": "ils", "name": "ILS, double bridge + 3 node exchanges", "short": "ILS", "shape": "cycle", "time_limit_from": "msls" }
+  ]
+}
