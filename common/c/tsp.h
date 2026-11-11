@@ -133,6 +133,19 @@ static void rng_shuffle(Rng *rng, int *items, int length) {
     }
 }
 
+/* Set by run_solver() before every run (see the functions below). */
+static long long time_limit_ns = -1;  /* --time-limit-ms converted to ns, -1 if not given */
+static long long run_iterations = -1; /* reported by the solver, printed in run_end if >= 0 */
+
+/* Time limit of one run in ns (from --time-limit-ms), or fail if it was not given. */
+static inline long long time_limit(void) {
+    if (time_limit_ns < 0) fail("this method needs --time-limit-ms");
+    return time_limit_ns;
+}
+
+/* Number of iterations of the current run (e.g. local search runs), added to its run_end. */
+static inline void report_iterations(long long count) { run_iterations = count; }
+
 static long long now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -150,10 +163,11 @@ typedef struct {
     const char *mode; /* "bench" or "trace" */
     int start;        /* trace mode: run to trace */
     uint64_t seed;
+    long long time_limit_ms; /* -1 if not given */
 } Args;
 
 static Args parse_args(int argc, char **argv) {
-    Args args = {NULL, NULL, "bench", 0, DEFAULT_SEED};
+    Args args = {NULL, NULL, "bench", 0, DEFAULT_SEED, -1};
 
     for (int i = 1; i + 1 < argc; i += 2) {
         const char *flag = argv[i];
@@ -163,6 +177,7 @@ static Args parse_args(int argc, char **argv) {
         else if (!strcmp(flag, "--mode")) args.mode = value;
         else if (!strcmp(flag, "--start")) args.start = atoi(value);
         else if (!strcmp(flag, "--seed")) args.seed = strtoull(value, NULL, 10);
+        else if (!strcmp(flag, "--time-limit-ms")) args.time_limit_ms = atoll(value);
         else fail("unknown argument");
     }
 
@@ -175,6 +190,7 @@ static int run_solver(int argc, char **argv, SolveFn solve, RunsFn runs_for) {
     Args args = parse_args(argc, argv);
     Instance instance = load_instance(args.instance_path);
     int is_trace = !strcmp(args.mode, "trace");
+    if (args.time_limit_ms >= 0) time_limit_ns = args.time_limit_ms * 1000000LL;
 
     int total_runs = runs_for(args.method, instance.n);
     if (total_runs < 0) fail("unknown method");
@@ -191,6 +207,7 @@ static int run_solver(int argc, char **argv, SolveFn solve, RunsFn runs_for) {
     long long total_ns = 0;
     for (int run = first_run; run < first_run + run_count; run++) {
         uint64_t seed = args.seed + (uint64_t)run;
+        run_iterations = -1;
 
         long long started = now_ns();
         int tour_length = solve(&instance, args.method, run, seed, is_trace, tour);
@@ -203,6 +220,7 @@ static int run_solver(int argc, char **argv, SolveFn solve, RunsFn runs_for) {
         printf("{\"t\":\"run_end\",\"run\":%d,\"obj\":%lld,\"len\":%lld,\"cost\":%lld,\"ns\":%lld,\"tour\":", run,
                cycle_length + total_cost, cycle_length, total_cost, elapsed_ns);
         print_tour(tour, tour_length);
+        if (run_iterations >= 0) printf(",\"iterations\":%lld", run_iterations);
         fputs("}\n", stdout);
         fflush(stdout);
     }

@@ -11,6 +11,10 @@ UINT64_MASK = (1 << 64) - 1
 INFINITY = 1 << 62
 DEFAULT_SEED = 42
 
+# Set by run() before every run (see the setters/getters below).
+time_limit_ns = None   # --time-limit-ms converted to ns, None if not given
+run_iterations = None  # reported by the solver, emitted in run_end if not None
+
 
 class Instance:
     """Distance matrix and node costs (coordinates are dropped after building the matrix).
@@ -91,14 +95,28 @@ def emit_step(tour):
     emit({"t": "step", "tour": tour})
 
 
+def time_limit():
+    """Time limit of one run in ns (from --time-limit-ms), or fail if it was not given."""
+    if time_limit_ns is None:
+        fail("this method needs --time-limit-ms")
+    return time_limit_ns
+
+
+def report_iterations(count):
+    """Number of iterations of the current run (e.g. local search runs), added to its run_end."""
+    global run_iterations
+    run_iterations = count
+
+
 def fail(message):
     emit({"t": "error", "msg": message})
     sys.exit(2)
 
 
 def parse_args(argv):
-    args = {"instance": None, "method": None, "mode": "bench", "start": 0, "seed": DEFAULT_SEED}
-    integer_args = ("start", "seed")
+    args = {"instance": None, "method": None, "mode": "bench", "start": 0, "seed": DEFAULT_SEED,
+            "time-limit-ms": None}
+    integer_args = ("start", "seed", "time-limit-ms")
 
     if len(argv) % 2 != 0:
         fail("arguments must come in --key value pairs")
@@ -116,7 +134,10 @@ def parse_args(argv):
 
 def run(solve, runs_for):
     """Protocol driver. Bench mode runs every run; trace mode only the run given by --start."""
+    global time_limit_ns, run_iterations
     args = parse_args(sys.argv[1:])
+    if args["time-limit-ms"] is not None:
+        time_limit_ns = args["time-limit-ms"] * 1_000_000
     instance = Instance(args["instance"])
     method = args["method"]
     is_trace = args["mode"] == "trace"
@@ -140,6 +161,7 @@ def run(solve, runs_for):
     total_ns = 0
     for run_index in run_indices:
         seed = args["seed"] + run_index
+        run_iterations = None
 
         started = time.perf_counter_ns()
         tour = solve(instance, method, run_index, seed, is_trace)
@@ -147,7 +169,7 @@ def run(solve, runs_for):
         total_ns += elapsed_ns
 
         length, cost = instance.evaluate(tour)
-        emit({
+        run_end = {
             "t": "run_end",
             "run": run_index,
             "obj": length + cost,
@@ -155,6 +177,9 @@ def run(solve, runs_for):
             "cost": cost,
             "ns": elapsed_ns,
             "tour": tour,
-        })
+        }
+        if run_iterations is not None:
+            run_end["iterations"] = run_iterations
+        emit(run_end)
 
     emit({"t": "done", "total_ns": total_ns})

@@ -6,12 +6,15 @@ The server (`server.py`) relies on it to run solvers and stream their progress t
 ## Command line
 
 ```
-solver --instance <path.csv> --method <id> --mode trace|bench [--start S] [--seed 42]
+solver --instance <path.csv> --method <id> --mode trace|bench [--start S] [--seed 42] [--time-limit-ms T]
 ```
 
 - `--mode bench` runs every run of the method (e.g. 200) and prints only one line per run.
 - `--mode trace` runs a single run (`--start S` = run index) and prints every intermediate step.
 - For greedy methods run `i` starts from node `i`. Random run `i` uses seed `seed + i`.
+- `--time-limit-ms` is the time of one run for time-limited methods (read with `time_limit()`).
+  The server passes it for a method with `"time_limit_from": "<other method id>"` in `lab.json`:
+  the average time of one run of that other method, from its saved benchmark (same instance and language).
 
 ## Output: one JSON object per line on stdout, flushed after each line
 
@@ -19,9 +22,11 @@ solver --instance <path.csv> --method <id> --mode trace|bench [--start S] [--see
 |-----------|------------------------------------------------------------|-------------------------------|
 | `meta`    | `n`, `k`, `runs`, `mode`                                   | once, first                   |
 | `step`    | `tour` (node indices, current partial solution)            | trace only, after each change |
-| `run_end` | `run`, `obj`, `len`, `cost`, `ns`, `tour`                  | after every run               |
+| `run_end` | `run`, `obj`, `len`, `cost`, `ns`, `tour`, [`iterations`]  | after every run               |
 | `done`    | `total_ns`                                                 | once, last                    |
 | `error`   | `msg`                                                      | on failure (then exit != 0)   |
+
+`iterations` (optional) is set by the solver with `report_iterations(count)`, e.g. the number of local search runs.
 
 `ns` is the time of the algorithm only (instance loading and evaluation are excluded).
 In trace mode it also includes the time spent printing steps, so use bench mode for timing.

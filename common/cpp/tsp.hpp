@@ -124,6 +124,19 @@ struct Rng {
     }
 };
 
+// Set by run() before every run (see the functions below).
+inline long long time_limit_ns = -1;   // --time-limit-ms converted to ns, -1 if not given
+inline long long run_iterations = -1;  // reported by the solver, printed in run_end if >= 0
+
+// Time limit of one run in ns (from --time-limit-ms), or fail if it was not given.
+inline long long time_limit() {
+    if (time_limit_ns < 0) fail("this method needs --time-limit-ms");
+    return time_limit_ns;
+}
+
+// Number of iterations of the current run (e.g. local search runs), added to its run_end.
+inline void report_iterations(long long count) { run_iterations = count; }
+
 using SolveFn = std::function<std::vector<int>(const Instance &instance, const std::string &method, int run,
                                                uint64_t seed, bool trace)>;
 using RunsFn = std::function<int(const std::string &method, int n)>;  // -1 = unknown method
@@ -134,6 +147,7 @@ struct Args {
     std::string mode = "bench";  // "bench" or "trace"
     int start = 0;               // trace mode: run to trace
     uint64_t seed = DEFAULT_SEED;
+    long long time_limit_ms = -1;  // -1 if not given
 };
 
 inline Args parse_args(int argc, char **argv) {
@@ -147,6 +161,7 @@ inline Args parse_args(int argc, char **argv) {
         else if (flag == "--mode") args.mode = value;
         else if (flag == "--start") args.start = std::stoi(value);
         else if (flag == "--seed") args.seed = std::stoull(value);
+        else if (flag == "--time-limit-ms") args.time_limit_ms = std::stoll(value);
         else fail("unknown argument " + flag);
     }
 
@@ -161,6 +176,7 @@ inline int run(int argc, char **argv, const SolveFn &solve, const RunsFn &runs_f
     Args args = parse_args(argc, argv);
     Instance instance = Instance::load(args.instance_path);
     bool is_trace = args.mode == "trace";
+    if (args.time_limit_ms >= 0) time_limit_ns = args.time_limit_ms * 1000000LL;
 
     int total_runs = runs_for(args.method, instance.n);
     if (total_runs < 0) fail("unknown method " + args.method);
@@ -175,6 +191,7 @@ inline int run(int argc, char **argv, const SolveFn &solve, const RunsFn &runs_f
     long long total_ns = 0;
     for (int run = first_run; run < first_run + run_count; run++) {
         uint64_t seed = args.seed + static_cast<uint64_t>(run);
+        run_iterations = -1;
 
         auto started = std::chrono::steady_clock::now();
         std::vector<int> tour = solve(instance, args.method, run, seed, is_trace);
@@ -186,7 +203,9 @@ inline int run(int argc, char **argv, const SolveFn &solve, const RunsFn &runs_f
 
         std::cout << "{\"t\":\"run_end\",\"run\":" << run << ",\"obj\":" << cycle_length + total_cost
                   << ",\"len\":" << cycle_length << ",\"cost\":" << total_cost << ",\"ns\":" << elapsed_ns
-                  << ",\"tour\":" << tour_json(tour, tour.size()) << "}" << std::endl;
+                  << ",\"tour\":" << tour_json(tour, tour.size());
+        if (run_iterations >= 0) std::cout << ",\"iterations\":" << run_iterations;
+        std::cout << "}" << std::endl;
     }
 
     std::cout << "{\"t\":\"done\",\"total_ns\":" << total_ns << "}" << std::endl;

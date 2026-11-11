@@ -5,6 +5,7 @@
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Instant;
 
 const DEFAULT_SEED: u64 = 42;
@@ -137,6 +138,26 @@ impl Rng {
     }
 }
 
+/// Set by `run` before every run (see the functions below).
+/// --time-limit-ms converted to ns, -1 if not given.
+static TIME_LIMIT_NS: AtomicI64 = AtomicI64::new(-1);
+/// Reported by the solver, printed in run_end if >= 0.
+static RUN_ITERATIONS: AtomicI64 = AtomicI64::new(-1);
+
+/// Time limit of one run in ns (from --time-limit-ms), or fail if it was not given.
+pub fn time_limit() -> u128 {
+    let limit = TIME_LIMIT_NS.load(Ordering::Relaxed);
+    if limit < 0 {
+        fail("this method needs --time-limit-ms");
+    }
+    limit as u128
+}
+
+/// Number of iterations of the current run (e.g. local search runs), added to its run_end.
+pub fn report_iterations(count: i64) {
+    RUN_ITERATIONS.store(count, Ordering::Relaxed);
+}
+
 /// solve(instance, method, run, seed, trace) -> tour; runs_for(method, n) -> number of runs (None = unknown method).
 pub type SolveFn = fn(&Instance, &str, usize, u64, bool) -> Vec<usize>;
 pub type RunsFn = fn(&str, usize) -> Option<usize>;
@@ -148,6 +169,8 @@ struct Args {
     /// Trace mode: run to trace.
     start: usize,
     seed: u64,
+    /// -1 if not given.
+    time_limit_ms: i64,
 }
 
 fn parse_args() -> Args {
@@ -158,6 +181,7 @@ fn parse_args() -> Args {
         is_trace: false,
         start: 0,
         seed: DEFAULT_SEED,
+        time_limit_ms: -1,
     };
 
     for pair in argv.chunks_exact(2) {
@@ -169,6 +193,7 @@ fn parse_args() -> Args {
             "--mode" => args.is_trace = value == "trace",
             "--start" => args.start = value.parse().unwrap_or_else(|_| fail("bad --start")),
             "--seed" => args.seed = value.parse().unwrap_or_else(|_| fail("bad --seed")),
+            "--time-limit-ms" => args.time_limit_ms = value.parse().unwrap_or_else(|_| fail("bad --time-limit-ms")),
             other => fail(&format!("unknown argument {}", other)),
         }
     }
@@ -183,6 +208,9 @@ fn parse_args() -> Args {
 pub fn run(solve: SolveFn, runs_for: RunsFn) {
     let args = parse_args();
     let instance = Instance::load(&args.instance_path);
+    if args.time_limit_ms >= 0 {
+        TIME_LIMIT_NS.store(args.time_limit_ms * 1_000_000, Ordering::Relaxed);
+    }
 
     let total_runs = match runs_for(&args.method, instance.n) {
         Some(total) => total,
@@ -205,6 +233,7 @@ pub fn run(solve: SolveFn, runs_for: RunsFn) {
     let mut total_ns: u128 = 0;
     for &run_index in &run_indices {
         let seed = args.seed.wrapping_add(run_index as u64);
+        RUN_ITERATIONS.store(-1, Ordering::Relaxed);
 
         let started = Instant::now();
         let tour = solve(&instance, &args.method, run_index, seed, args.is_trace);
@@ -212,14 +241,17 @@ pub fn run(solve: SolveFn, runs_for: RunsFn) {
         total_ns += elapsed_ns;
 
         let (cycle_length, total_cost) = instance.evaluate(&tour);
+        let iterations = RUN_ITERATIONS.load(Ordering::Relaxed);
+        let iterations_json = if iterations >= 0 { format!(",\"iterations\":{}", iterations) } else { String::new() };
         emit(&format!(
-            "{{\"t\":\"run_end\",\"run\":{},\"obj\":{},\"len\":{},\"cost\":{},\"ns\":{},\"tour\":{}}}",
+            "{{\"t\":\"run_end\",\"run\":{},\"obj\":{},\"len\":{},\"cost\":{},\"ns\":{},\"tour\":{}{}}}",
             run_index,
             cycle_length + total_cost,
             cycle_length,
             total_cost,
             elapsed_ns,
-            tour_json(&tour)
+            tour_json(&tour),
+            iterations_json
         ));
     }
 
