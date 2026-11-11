@@ -62,6 +62,7 @@ def find_labs():
             "dir": lab_dir,
             "title": spec.get("title", folder),
             "methods": spec.get("methods", []),
+            "iterations": spec.get("iterations", "Iterations per run"),  # what the iterations reported by the solvers count
             "langs": [l for l, info in LANGS.items() if os.path.exists(os.path.join(lab_dir, info["src"]))],
         })
     return sorted(labs, key=lambda l: l["num"])
@@ -152,10 +153,14 @@ def check_run(inst, msg):
 def summarize(runs):
     objs = [r["obj"] for r in runs]
     times = [r["ns"] for r in runs]
-    return {
+    stats = {
         "obj_min": min(objs), "obj_max": max(objs), "obj_avg": sum(objs) / len(objs),
         "ns_min": min(times), "ns_max": max(times), "ns_avg": sum(times) / len(times), "ns_total": sum(times),
     }
+    iterations = [r["iterations"] for r in runs if "iterations" in r]
+    if iterations:  # methods that report e.g. the number of local search runs
+        stats.update(it_min=min(iterations), it_max=max(iterations), it_avg=sum(iterations) / len(iterations))
+    return stats
 
 
 def result_path(lab_id, instance, method, lang):
@@ -169,6 +174,7 @@ def save_result(lab_id, instance, method, lang, runs, best, wall_ms, all_ok, see
         "stats": summarize(runs),
         "objs": [r["obj"] for r in runs],
         "times": [r["ns"] for r in runs],
+        **({"iterations": [r["iterations"] for r in runs]} if "iterations" in runs[0] else {}),
         "best": {k: best[k] for k in ("run", "obj", "len", "cost", "tour")},
     }
     path = result_path(lab_id, instance, method, lang)
@@ -176,6 +182,16 @@ def save_result(lab_id, instance, method, lang, runs, best, wall_ms, all_ok, see
     with open(path, "w") as f:
         json.dump(data, f)
     return os.path.relpath(path, ROOT)
+
+
+def time_limit_ms(lab, method, instance, lang):
+    """Time limit of a method with "time_limit_from" in lab.json: the average time of one run of that
+    other method, from its saved benchmark (same instance and language). None if it is not benchmarked yet."""
+    path = result_path(lab["id"], instance, method["time_limit_from"], lang)
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return max(1, round(json.load(f)["stats"]["ns_avg"] / 1e6))
 
 
 def load_results(lab_id, instance):
@@ -290,7 +306,8 @@ class Handler(BaseHTTPRequestHandler):
         lang, method, instance, mode = q.get("lang"), q.get("method"), q.get("instance"), q.get("mode", "trace")
         if lang not in lab["langs"]:
             return self.send_json({"error": "no %s solver in this lab" % lang}, 400)
-        if method not in [m["id"] for m in lab["methods"]]:
+        spec = next((m for m in lab["methods"] if m["id"] == method), None)
+        if spec is None:
             return self.send_json({"error": "unknown method"}, 400)
         if instance not in find_instances():
             return self.send_json({"error": "unknown instance"}, 400)
@@ -300,6 +317,12 @@ class Handler(BaseHTTPRequestHandler):
             start, seed = int(q.get("start", 0)), int(q.get("seed", DEFAULT_SEED))
         except ValueError:
             return self.send_json({"error": "start and seed must be integers"}, 400)
+        limit_ms = None
+        if "time_limit_from" in spec:
+            limit_ms = time_limit_ms(lab, spec, instance, lang)
+            if limit_ms is None:
+                return self.send_json({"error": "run the %s benchmark of %s first: its average time is the time limit"
+                                                % (lang, spec["time_limit_from"])}, 400)
 
         self.send_response(200)
         self.send_header("Content-Type", "application/x-ndjson")
@@ -317,6 +340,9 @@ class Handler(BaseHTTPRequestHandler):
 
         args = ["--instance", os.path.join(DATA, instance + ".csv"), "--method", method,
                 "--mode", mode, "--start", str(start), "--seed", str(seed)]
+        if limit_ms is not None:
+            args += ["--time-limit-ms", str(limit_ms)]
+            send({"t": "log", "msg": "time limit of one run: %d ms (average time of %s)" % (limit_ms, spec["time_limit_from"])})
         if mode == "trace":
             return self.stream(cmd + args, send, lab, lang, method, instance, mode, seed)
         if not BENCH_LOCK.acquire(blocking=False):
@@ -349,7 +375,7 @@ class Handler(BaseHTTPRequestHandler):
                         if problem:
                             msg["why"] = problem
                             all_ok = False
-                        runs.append({"run": msg["run"], "obj": msg["obj"], "ns": msg["ns"]})
+                        runs.append({k: msg[k] for k in ("run", "obj", "ns", "iterations") if k in msg})
                         if best is None or msg["obj"] < best["obj"]:
                             best = msg
                     elif msg.get("t") == "done":

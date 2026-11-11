@@ -327,14 +327,20 @@ def entries_of(labs, excluded=()):
     return [(l, m, m["name"]) for l in labs for m in l["methods"] if f"{l['id']}/{m['id']}" not in excluded]
 
 
-def time_section(inst, entries, pareto_entries, by_lab, files_dir):
-    """Markdown for one instance: table of the average time per run, methods by language, and the time/quality Pareto plot.
-    The table covers `entries`, the Pareto plot covers `pareto_entries`."""
+def time_section(inst, entries, pareto_entries, by_lab, files_dir, iterations_title):
+    """Markdown for one instance: table of the average time per run, methods by language, the average iterations
+    by language (only methods that report them), and the time/quality Pareto plot.
+    The tables cover `entries`, the Pareto plot covers `pareto_entries`."""
     rows = []  # (method name, {lang: avg ns})
+    it_rows = []  # (method name, {lang: avg iterations})
     for lab, m, mname in entries:
-        by = {lang: r["stats"]["ns_avg"] for lang, r in by_lab[lab["id"]].get(m["id"], {}).items()}
+        results = by_lab[lab["id"]].get(m["id"], {})
+        by = {lang: r["stats"]["ns_avg"] for lang, r in results.items()}
         if by:
             rows.append((mname, by))
+        its = {lang: r["stats"]["it_avg"] for lang, r in results.items() if "it_avg" in r["stats"]}
+        if its:
+            it_rows.append((mname, its))
     compared = {(lab["id"], m["id"]) for lab, m, _ in entries}
     pareto = []  # (method name, avg ns, avg objective, muted, short name, lang), one language for all methods
     for lab, m, mname in pareto_entries:
@@ -350,6 +356,11 @@ def time_section(inst, entries, pareto_entries, by_lab, files_dir):
         fastest = min(by.values())
         table.append(f"| {mname} | " + " | ".join(
             "" if l not in by else f"**{fmt_time(by[l])}**" if by[l] == fastest else fmt_time(by[l]) for l in langs) + " |")
+    if it_rows:  # e.g. a time-limited method runs more local searches in a faster language
+        table += ["", f"{iterations_title} (average) in the same runs:", "",
+                  "| Method | " + " | ".join(LANG_NAMES[l] for l in langs) + " |", "|---|" + "--:|" * len(langs)]
+        for mname, its in it_rows:
+            table.append(f"| {mname} | " + " | ".join(f"{round(its[l])}" if l in its else "" for l in langs) + " |")
     name = f"{inst}_pareto.svg"
     with open(os.path.join(files_dir, name), "w") as f:
         f.write(svg_pareto([p[:5] for p in pareto], LANG_NAMES[pareto[0][5]]))
@@ -384,6 +395,29 @@ def results_table(instances, stats):
     return table
 
 
+def iterations_table(instances, rows):
+    """Markdown lines of the table of iterations per run (e.g. runs of local search): a row per method that reports them,
+    a column per instance, each cell "av (min – max)". rows: [(method name, {instance: stats})]."""
+    table = ["| Method | " + " | ".join(instances) + " |", "|---|" + ":-:|" * len(instances)]
+    for mname, by_inst in rows:
+        cells = [f"{round(s['it_avg'])} ({s['it_min']} – {s['it_max']})" if s else "not run" for s in (by_inst.get(i) for i in instances)]
+        table.append(f"| {mname} | " + " | ".join(cells) + " |")
+    return table
+
+
+def runs_summary(counts):
+    """"200 runs per method" or, when the counts differ, "200 runs per method (MSLS, ILS: 20)". counts: [(short name, runs)]."""
+    if not counts:
+        return "0 runs per method"
+    usual = max({c for _, c in counts}, key=lambda c: sum(1 for _, x in counts if x == c))
+    others = {}
+    for name, c in counts:
+        if c != usual and name not in others.get(c, []):
+            others.setdefault(c, []).append(name)
+    extra = "; ".join(f"{', '.join(names)}: {c}" for c, names in sorted(others.items()))
+    return f"{usual} runs per method" + (f" ({extra})" if extra else "")
+
+
 def build_blocks(labs, instances, out_dir, own, excluded=()):
     """Return ({block name: markdown}, [warnings]). Also writes the plot SVGs.
 
@@ -403,12 +437,15 @@ def build_blocks(labs, instances, out_dir, own, excluded=()):
         os.remove(old)
 
     all_checked, all_same, multi_lang = True, True, False
+    time_limited = []  # short names of methods that stop after a time limit: their results depend on the language speed
+    run_counts = []  # (short name, runs) of every compared method
+    iterations = {}  # method name -> {instance: stats} of the methods that report iterations
     stats = {}  # instance -> rows of the results table
     for inst in instances:
         by_lab = {l["id"]: load_results(l["id"], inst) for l in pareto_labs}
         nodes = load_nodes(inst)
         plots = []  # the visualisations of this instance, shown under the results table
-        times.append(time_section(inst, entries, pareto_entries, by_lab, files_dir))
+        times.append(time_section(inst, entries, pareto_entries, by_lab, files_dir, own["iterations"]))
         sols.append(f"### Instance {inst}\n")
         rows = stats[inst] = []  # (method name, [avg, min, max]) or (method name, None) when not run
         for lab, m, mname in entries:
@@ -419,12 +456,21 @@ def build_blocks(labs, instances, out_dir, own, excluded=()):
                 rows.append((mname, None))
                 continue
             langs = by[m["id"]]
+            short = m.get("short", mname)
             if len(langs) > 1:
                 multi_lang = True
-                all_same &= all(x["stats"]["obj_min"] == r["stats"]["obj_min"] and x["best"]["tour"] == r["best"]["tour"]
-                                for x in langs.values())
+                if "time_limit_from" in m:  # time-limited: a faster language runs more iterations, so the results differ
+                    if short not in time_limited:
+                        time_limited.append(short)
+                else:
+                    all_same &= all(x["stats"]["obj_min"] == r["stats"]["obj_min"] and x["best"]["tour"] == r["best"]["tour"]
+                                    for x in langs.values())
             all_checked &= bool(r["checked"])
             s, b = r["stats"], r["best"]
+            if (short, len(r["objs"])) not in run_counts:
+                run_counts.append((short, len(r["objs"])))
+            if "it_avg" in s:
+                iterations.setdefault(mname, {})[inst] = s
             rows.append((mname, [round(s["obj_avg"]), s["obj_min"], s["obj_max"]]))
             name = f"{inst}_{lab['id']}_{m['id']}.svg"
             with open(os.path.join(files_dir, name), "w") as f:
@@ -436,13 +482,19 @@ def build_blocks(labs, instances, out_dir, own, excluded=()):
         res.extend(plots)
         res.append("")
 
+    if iterations:
+        res = ["### " + own["iterations"], "",
+               f"Cells: av (min – max) over the runs, {LANG_NAMES[LANG_ORDER[0]]} (the language of the tables above).", ""] \
+            + iterations_table(instances, list(iterations.items())) + [""] + res
     res = results_table(instances, stats) + [""] + res
-    n_runs = ", ".join(sorted({str(len(r["objs"])) for i in instances for l in labs for by in [load_results(l["id"], i)]
-                               for langs in by.values() for r in langs.values()}))
-    summary = (f"Objective = cycle length + node costs, {n_runs or '0'} runs per method. Cells: av (min – max), best of each per instance in bold.\n"
+    summary = (f"Objective = cycle length + node costs, {runs_summary(run_counts)}. Cells: av (min – max), best of each per instance in bold.\n"
                f"All best solutions were checked with the solution checker: **{'yes' if all_checked else 'NO'}**.")
     if multi_lang:
-        summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**."
+        summary += f"\nResults are identical in all implemented languages: **{'yes' if all_same else 'NO'}**"
+        if time_limited:
+            summary += (f" (except {', '.join(time_limited)}: it stops after a time limit, so a faster language runs more iterations; "
+                        f"the tables show {LANG_NAMES[LANG_ORDER[0]]})")
+        summary += "."
     times_intro = ("Average time of one run **in ms** (algorithm only, same runs as above); "
                    "the fastest language per row is in bold.")
 
